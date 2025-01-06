@@ -2,3 +2,4 @@
 *.txt
 main.o
 main
+.zig-cache/
