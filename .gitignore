@@ -1,0 +1,4 @@
+*.asm
+*.txt
+main.o
+main
