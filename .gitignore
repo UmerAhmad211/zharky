@@ -3,3 +3,4 @@
 main.o
 main
 .zig-cache/
+zig-out/
