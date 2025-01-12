@@ -18,4 +18,5 @@ pub fn main() !void {
     }
     _ = ut.validFileExtension(args[1]);
     try plt.process(args[1]);
+    plt.tokenizeAndCheckForErr("label: stc$", 1);
 }
