@@ -13,10 +13,12 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len != 2) {
-        std.debug.print("SASM: Expected file name only.\n", .{});
+        std.debug.print("ZHARKY: Expected file name only.\n", .{});
+        std.process.exit(1);
+    } else if (!ut.validFileExtension(args[1])) {
+        std.debug.print("ZHARKY: Expected file name only.\n", .{});
         std.process.exit(1);
     }
-    _ = ut.validFileExtension(args[1]);
+
     try plt.process(args[1]);
-    plt.tokenizeAndCheckForErr("label: stc$", 1);
 }
