@@ -1,7 +1,5 @@
-org$ 0x100%
-
-mov$ ax% 9
+mov$ ax% 9d%
 mov$ bx% ax%
+nop$
+mov$ cx% 4c00h%
 
-mov$ ax% 0x4c00%
-int$ ox21%
