@@ -19,7 +19,7 @@ pub fn validFileExtension(file_name: []const u8) bool {
     const asm_extension: []const u8 = ".asm";
     // rets index of where .asm is found
     const validator = std.mem.indexOf(u8, file_name, asm_extension);
-    // discard capture
+    // save index
     if (validator) |i| {
         index_asm = i;
         return true;
@@ -123,7 +123,7 @@ pub fn retOperandsType(op1: []const u8, op2: []const u8) OperandsType {
     else if (retRegValues(op1) != AsmError.InvalidRegister and isValidMemAddrStyle(op2)) {
         return OperandsType.memToReg;
     }
-    // mov$ [reg or num] 78%
+    // mov$ [reg or num] 78d%
     else if (isValidMemAddrStyle(op1) and isANumOfAnyBase(op2) != NumError.InvalidNumBase) {
         return OperandsType.constToMem;
     } else return OperandsType.noExist;

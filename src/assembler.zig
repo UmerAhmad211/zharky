@@ -64,6 +64,7 @@ fn mov(tokens: *plt.Mnemonics, encodings: *std.ArrayList(u8)) !void {
             try encodings.append(@intCast(conv_imm & 0xFF));
             try encodings.append(@intCast((conv_imm >> 8) & 0xFF));
         },
+        ut.OperandsType.memToReg => {},
         // irrelevant operands
         else => {
             return encodingError.wrongOperands;
