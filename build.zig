@@ -1,14 +1,15 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    const options = std.Build.Module.CreateOptions{
+        .root_source_file = b.path("main.zig"),
+        .target = b.graph.host,
+    };
+
     const exe = b.addExecutable(.{
         .name = "zhky",
-        .root_source_file = b.path("main.zig"),
-        .target = b.host,
-        .optimize = .ReleaseFast,
-        .strip = true,
-        .single_threaded = true,
-        .unwind_tables = false,
+        .root_module = b.createModule(options),
+        .optimize = .Debug,
     });
 
     b.installArtifact(exe);
