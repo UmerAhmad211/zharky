@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "zhky",
         .root_module = b.createModule(options),
-        .optimize = .Debug,
+        .use_llvm = false,
     });
 
     b.installArtifact(exe);
