@@ -3,6 +3,8 @@ const std = @import("std");
 pub const NumError = error{InvalidNumBase};
 pub const AsmError = error{InvalidRegister};
 pub var index_asm: usize = 0;
+pub var out_file_name: []const u8 = undefined;
+pub var out_file_type: []const u8 = undefined;
 
 // operand types
 pub const OperandsType = enum {
@@ -36,15 +38,15 @@ pub fn readFileStoreAndTrim(lines: *std.ArrayList([]const u8), allocator: *const
     // err when file not found
     const file = std.fs.cwd().openFile(file_name, .{}) catch |err|
         switch (err) {
-        error.FileNotFound => {
-            std.debug.print("ZHARKY: file not found.\n", .{});
-            std.process.exit(1);
-        },
-        else => {
-            std.debug.print("ZHARKY: {}\n", .{err});
-            std.process.exit(1);
-        },
-    };
+            error.FileNotFound => {
+                std.debug.print("ZHARKY: file not found.\n", .{});
+                std.process.exit(1);
+            },
+            else => {
+                std.debug.print("ZHARKY: {}\n", .{err});
+                std.process.exit(1);
+            },
+        };
     defer file.close();
     var buf_rdr = std.io.bufferedReader(file.reader());
     const rdr = buf_rdr.reader();
@@ -55,23 +57,23 @@ pub fn readFileStoreAndTrim(lines: *std.ArrayList([]const u8), allocator: *const
         // read each line and store it in buf
         rdr.streamUntilDelimiter(buf.writer(), '\n', null) catch |err|
             switch (err) {
-            // switch on err, if end of stream append and break
-            error.EndOfStream => {
-                if (buf.items.len > 0) {
-                    // append copy of buf to lines and trim
-                    if (buf.items[0] != '\n') {
-                        const trimmed_buf = std.mem.trim(u8, buf.items, " \r\n\t");
-                        try lines.append(try allocator.dupe(u8, trimmed_buf));
+                // switch on err, if end of stream append and break
+                error.EndOfStream => {
+                    if (buf.items.len > 0) {
+                        // append copy of buf to lines and trim
+                        if (buf.items[0] != '\n') {
+                            const trimmed_buf = std.mem.trim(u8, buf.items, " \r\n\t");
+                            try lines.append(try allocator.dupe(u8, trimmed_buf));
+                        }
                     }
-                }
-                break;
-            },
-            // err out
-            else => {
-                std.debug.print("Err: {}\n", .{err});
-                std.process.exit(1);
-            },
-        };
+                    break;
+                },
+                // err out
+                else => {
+                    std.debug.print("Err: {}\n", .{err});
+                    std.process.exit(1);
+                },
+            };
         // append copy of buf to lines and trim
         if (buf.items.len > 0) {
             if (buf.items[0] != '\n') {
@@ -148,10 +150,10 @@ pub fn isANumOfAnyBase(num: []const u8) NumError!u16 {
     const num_without_id = num[0 .. num.len - 1];
     const conv_num: u16 = std.fmt.parseInt(u16, num_without_id, base) catch |err|
         switch (err) {
-        error.InvalidCharacter, error.Overflow => {
-            return NumError.InvalidNumBase;
-        },
-    };
+            error.InvalidCharacter, error.Overflow => {
+                return NumError.InvalidNumBase;
+            },
+        };
     return conv_num;
 }
 
@@ -165,4 +167,41 @@ fn isValidMemAddrStyle(mem_addr: []const u8) bool {
             return true;
         return false;
     }
+}
+
+pub fn printHelp() !void {
+    const zhky_usage =
+        \\ zhky <file_name> -o <out_file_name> -<out_file_type>
+        \\ Example:
+        \\ zhky main.asm -o main -elf32 
+        \\ Note: As of now zharky only emits Windows (win32), Linux (elf32) and DOS (dos) executables.
+        \\ zharky supports cross compilation.
+    ;
+
+    // dont make this global, wont compile for windows
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("{s}", .{zhky_usage});
+}
+
+pub fn assemblerDriver(args: [][:0]u8) !void {
+    if (args.len != 5) {
+        std.debug.print("ZHARKY: Wrong args.\n", .{});
+        std.process.exit(1);
+    } else if (std.mem.eql(u8, args[1], "help")) {
+        try printHelp();
+        std.process.exit(0);
+    } else if (!validFileExtension(args[1])) {
+        std.debug.print("ZHARKY: Wrong args.\n", .{});
+        std.process.exit(1);
+    }
+    out_file_name = args[3];
+
+    if (!(std.mem.eql(u8, args[4], "-win32") or
+        std.mem.eql(u8, args[4], "-elf32") or
+        std.mem.eql(u8, args[4], "-dos")))
+    {
+        std.debug.print("ZHARKY: No such target exists. Use -elf32, -win32 or -dos.", .{});
+        std.process.exit(1);
+    }
+    out_file_type = args[4];
 }
