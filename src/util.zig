@@ -180,16 +180,18 @@ pub fn printHelp() !void {
 
     // dont make this global, wont compile for windows
     const stdout = std.io.getStdOut().writer();
-    try stdout.print("{s}", .{zhky_usage});
+    try stdout.print("{s}\n", .{zhky_usage});
 }
 
 pub fn assemblerDriver(args: [][:0]u8) !void {
-    if (args.len != 5) {
+    if (args.len == 2) {
+        if (std.mem.eql(u8, args[1], "help")) {
+            try printHelp();
+            std.process.exit(0);
+        }
+    } else if (args.len != 5) {
         std.debug.print("ZHARKY: Wrong args.\n", .{});
         std.process.exit(1);
-    } else if (std.mem.eql(u8, args[1], "help")) {
-        try printHelp();
-        std.process.exit(0);
     } else if (!validFileExtension(args[1])) {
         std.debug.print("ZHARKY: Wrong args.\n", .{});
         std.process.exit(1);
