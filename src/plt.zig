@@ -27,21 +27,8 @@ pub fn process(file_name: []const u8) !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // output file name total size
-    const out_file_name_len = ut.index_asm + 4;
-
-    // allocate it
-    var out_file_name = try allocator.alloc(u8, out_file_name_len);
-    defer allocator.free(out_file_name);
-
-    // copy name
-    std.mem.copyForwards(u8, out_file_name[0..], file_name[0 .. ut.index_asm + 1]);
-
-    // copy com extension
-    std.mem.copyForwards(u8, out_file_name[ut.index_asm + 1 ..], "com");
-
     // file
-    const file = try std.fs.cwd().createFile(out_file_name, .{});
+    const file = try std.fs.cwd().createFile(ut.out_file_name, .{});
     defer file.close();
 
     // allocate lines
