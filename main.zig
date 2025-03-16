@@ -12,13 +12,6 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    if (args.len != 2) {
-        std.debug.print("ZHARKY: Expected file name only.\n", .{});
-        std.process.exit(1);
-    } else if (!ut.validFileExtension(args[1])) {
-        std.debug.print("ZHARKY: Expected file name only.\n", .{});
-        std.process.exit(1);
-    }
-
+    try ut.assemblerDriver(args);
     try plt.process(args[1]);
 }
