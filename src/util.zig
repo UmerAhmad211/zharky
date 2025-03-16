@@ -2,7 +2,8 @@ const std = @import("std");
 
 pub const NumError = error{InvalidNumBase};
 pub const AsmError = error{InvalidRegister};
-pub var index_asm: usize = 0;
+pub var out_file_name: []const u8 = undefined;
+pub var out_file_type: []const u8 = undefined;
 
 // operand types
 pub const OperandsType = enum {
@@ -20,8 +21,7 @@ pub fn validFileExtension(file_name: []const u8) bool {
     // rets index of where .asm is found
     const validator = std.mem.indexOf(u8, file_name, asm_extension);
     // save index
-    if (validator) |i| {
-        index_asm = i;
+    if (validator) |_| {
         return true;
     }
     return false;
@@ -165,4 +165,53 @@ fn isValidMemAddrStyle(mem_addr: []const u8) bool {
             return true;
         return false;
     }
+}
+
+pub fn printHelp() !void {
+    const zhky_usage =
+        \\ zhky <file_name> -o <out_file_name> -<out_file_type>
+        \\ Example:
+        \\ zhky main.asm -o main -elf32 
+        \\ Note: As of now zharky only emits Windows (win32), Linux (elf32) and DOS (dos) executables.
+        \\ zharky supports cross compilation.
+    ;
+
+    // dont make this global, wont compile for windows
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("{s}\n", .{zhky_usage});
+}
+
+pub fn assemblerDriver(args: [][:0]u8) !void {
+    // only help with 2 args len
+    if (args.len == 2) {
+        if (std.mem.eql(u8, args[1], "help")) {
+            try printHelp();
+            std.process.exit(0);
+        }
+        std.debug.print("ZHARKY: Wrong args.\n", .{});
+        std.process.exit(1);
+    } else if (args.len != 5) {
+        std.debug.print("ZHARKY: Wrong args.\n", .{});
+        std.process.exit(1);
+    } else if (!validFileExtension(args[1])) {
+        std.debug.print("ZHARKY: Wrong args.\n", .{});
+        std.process.exit(1);
+    }
+
+    // only available targets
+    if (!(std.mem.eql(u8, args[4], "-win32") or
+        std.mem.eql(u8, args[4], "-elf32") or
+        std.mem.eql(u8, args[4], "-dos")))
+    {
+        std.debug.print("ZHARKY: No such target exists. Use -elf32, -win32 or -dos.", .{});
+        std.process.exit(1);
+    }
+    out_file_type = args[4];
+    out_file_name = args[3];
+}
+
+pub fn errMsgOrExit(msg: []const u8, exit_code: u8, exit_prog: bool) void {
+    std.debug.print("{s}\n", .{msg});
+    if (exit_prog)
+        std.process.exit(exit_code);
 }
