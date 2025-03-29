@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const NumError = error{InvalidNumBase};
+pub const NumError = error{ InvalidNumBase, NumConv };
 pub const AsmError = error{InvalidRegister};
 pub var out_file_name: []const u8 = undefined;
 pub var out_file_type: []const u8 = undefined;
@@ -60,7 +60,7 @@ pub fn readFileStoreAndTrim(lines: *std.ArrayList([]const u8), allocator: *const
                 if (buf.items.len > 0) {
                     // append copy of buf to lines and trim
                     if (buf.items[0] != '\n') {
-                        const trimmed_buf = std.mem.trim(u8, buf.items, " \r\n\t");
+                        const trimmed_buf = std.mem.trim(u8, buf.items, " ;\r\n\t");
                         try lines.append(try allocator.dupe(u8, trimmed_buf));
                     }
                 }
@@ -75,7 +75,7 @@ pub fn readFileStoreAndTrim(lines: *std.ArrayList([]const u8), allocator: *const
         // append copy of buf to lines and trim
         if (buf.items.len > 0) {
             if (buf.items[0] != '\n') {
-                const trimmed_buf = std.mem.trim(u8, buf.items, " \r\n\t");
+                const trimmed_buf = std.mem.trim(u8, buf.items, " ;\r\n\t");
                 try lines.append(try allocator.dupe(u8, trimmed_buf));
             }
         }
@@ -129,8 +129,8 @@ pub fn retOperandsType(op1: []const u8, op2: []const u8) OperandsType {
     } else return OperandsType.noExist;
 }
 
-// max 16 bit number
-pub fn isANumOfAnyBase(num: []const u8) NumError!u16 {
+// max 32 bit number
+pub fn isANumOfAnyBase(num: []const u8) NumError!u32 {
     // postfix check
     // d = decimal, h = hexa, o = octal, b = binary
     var base: u8 = 0;
@@ -145,13 +145,7 @@ pub fn isANumOfAnyBase(num: []const u8) NumError!u16 {
     } else return NumError.InvalidNumBase;
 
     // convert or return err
-    const num_without_id = num[0 .. num.len - 1];
-    const conv_num: u16 = std.fmt.parseInt(u16, num_without_id, base) catch |err|
-        switch (err) {
-        error.InvalidCharacter, error.Overflow => {
-            return NumError.InvalidNumBase;
-        },
-    };
+    const conv_num: u32 = std.fmt.parseInt(u32, num[0 .. num.len - 1], base) catch return NumError.NumConv;
     return conv_num;
 }
 
@@ -210,8 +204,16 @@ pub fn assemblerDriver(args: [][:0]u8) !void {
     out_file_name = args[3];
 }
 
-pub fn errMsgOrExit(msg: []const u8, exit_code: u8, exit_prog: bool) void {
-    std.debug.print("{s}\n", .{msg});
-    if (exit_prog)
-        std.process.exit(exit_code);
+pub inline fn containsStr(haystack: anytype, needle: []const u8) bool {
+    for (haystack) |i| {
+        if (std.mem.eql(u8, needle, i)) return true;
+    }
+    return false;
+}
+
+pub inline fn containsChar(haystack: []const u8, needle: u8) bool {
+    for (haystack) |i| {
+        if (i == needle) return true;
+    }
+    return false;
 }
