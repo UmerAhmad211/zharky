@@ -2,6 +2,7 @@ const std = @import("std");
 const ut = @import("util.zig");
 const tg_elf = @import("targets/elf.zig");
 const tg_win = @import("targets/win.zig");
+const td = @import("token_def.zig");
 const l = @import("lexer.zig");
 
 pub fn process(file_name: []const u8) !void {
@@ -33,12 +34,17 @@ pub fn process(file_name: []const u8) !void {
     }
 
     try ut.readFileStoreAndTrim(&lines, &allocator, file_name);
+    // lexer tokens
     var tokenized_input = std.ArrayList(l.Token).init(allocator);
+    defer tokenized_input.deinit();
+
+    // line no. to be used inform user where the error occured
     var line_no: u32 = 1;
     for (lines.items) |line| {
         try l.tokenizeInputStream(line, &tokenized_input);
         line_no += 1;
     }
+    try tokenized_input.append(.{ .type = td.TokenType.EOF, .value = "eof" });
 
     //_ = try file.writeAll(try encodings.toOwnedSlice());
 }
