@@ -29,7 +29,7 @@ pub const TokenType = enum {
 };
 
 pub const keyword = [_][]const u8{
-    "global", "section", "dw", "dd",
+    "global", "section", "db", "dw", "dd",
 };
 
 pub const section_name = [_][]const u8{
