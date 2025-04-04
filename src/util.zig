@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const NumError = error{ InvalidNumBase, NumConv };
+pub const NumError = error{ InvalidNumBase, NumConv, DefaultError };
 pub const AsmError = error{InvalidRegister};
 pub var out_file_name: []const u8 = undefined;
 pub var out_file_type: []const u8 = undefined;
@@ -134,16 +134,19 @@ pub fn isANumOfAnyBase(num: []const u8) NumError!u32 {
     // postfix check
     // d = decimal, h = hexa, o = octal, b = binary
     var base: u8 = 0;
-    if (num[num.len - 1] == 'h') {
-        base = 16;
-    } else if (num[num.len - 1] == 'o') {
-        base = 8;
-    } else if (num[num.len - 1] == 'b') {
-        base = 2;
-    } else if (num[num.len - 1] == 'd') {
-        base = 10;
-    } else return NumError.InvalidNumBase;
-
+    if (num.len > 0) {
+        if (num[num.len - 1] == 'h') {
+            base = 16;
+        } else if (num[num.len - 1] == 'o') {
+            base = 8;
+        } else if (num[num.len - 1] == 'b') {
+            base = 2;
+        } else if (num[num.len - 1] == 'd') {
+            base = 10;
+        } else return NumError.InvalidNumBase;
+    } else {
+        return NumError.DefaultError;
+    }
     // convert or return err
     const conv_num: u32 = std.fmt.parseInt(u32, num[0 .. num.len - 1], base) catch return NumError.NumConv;
     return conv_num;
