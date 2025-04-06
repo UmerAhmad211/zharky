@@ -51,7 +51,7 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                     try tokenized_input.append(.{ .type = td.TokenType.STRING, .value = line[i + 1 .. inner_index] });
                     i = inner_index;
                 } else {
-                    // not finding closing single quote
+                    // not finding closing double quote
                     std.debug.print("ZHARKY: Error: Unexpected token.\n", .{});
                     std.process.exit(1);
                 }
@@ -82,8 +82,14 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                     token_type = td.TokenType.KEYWORD;
                 } else if (ut.containsStr(td.section_name, line[i..inner_index])) {
                     token_type = td.TokenType.SECTION_NAME;
-                } else if (ut.containsStr(td.instructions, line[i..inner_index])) {
-                    token_type = td.TokenType.INSTRUCTION;
+                } else if (ut.containsStr(td.instructions_0op, line[i..inner_index])) {
+                    token_type = td.TokenType.INSTRUCTION_0OP;
+                } else if (ut.containsStr(td.instructions_1op, line[i..inner_index])) {
+                    token_type = td.TokenType.INSTRUCTION_1OP;
+                } else if (ut.containsStr(td.instructions_2op, line[i..inner_index])) {
+                    token_type = td.TokenType.INSTRUCTION_2OP;
+                } else if (ut.containsStr(td.instructions_optional_1op, line[i..inner_index])) {
+                    token_type = td.TokenType.INSTRUCTION_O1OP;
                 } else if (ut.containsStr(td.size, line[i..inner_index])) {
                     token_type = td.TokenType.SIZE;
                 } else if (ut.containsStr(td.regs, line[i..inner_index])) {
