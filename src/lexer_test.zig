@@ -13,7 +13,7 @@ test "Testing mov imm to reg" {
     try l.tokenizeInputStream(mov_imm_to_const, &t_tokenized_input);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[0].value, "mov"));
-    try expect(t_tokenized_input.items[0].type == l.td.TokenType.INSTRUCTION);
+    try expect(t_tokenized_input.items[0].type == l.td.TokenType.INSTRUCTION_2OP);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[1].value, "eax"));
     try expect(t_tokenized_input.items[1].type == l.td.TokenType.REG);
