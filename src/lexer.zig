@@ -1,7 +1,7 @@
 const std = @import("std");
 const ut = @import("util.zig");
 pub const td = @import("token_def.zig");
-const expect = std.testing.expect;
+const eql = std.mem.eql;
 
 pub const Token = struct {
     type: td.TokenType,
@@ -19,7 +19,6 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
             ':' => try tokenized_input.append(.{ .type = td.TokenType.COLON, .value = ":" }),
             '+' => try tokenized_input.append(.{ .type = td.TokenType.PLUS, .value = "+" }),
             '-' => try tokenized_input.append(.{ .type = td.TokenType.MINUS, .value = "-" }),
-            '*' => try tokenized_input.append(.{ .type = td.TokenType.STAR, .value = "*" }),
             ' ' => {}, //skip whitesapces
             '\'' => {
                 // 'A','2'
@@ -69,34 +68,30 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
 
                 // check on tokens
                 const conv_if_num = ut.isANumOfAnyBase(line[i..inner_index]);
-                var token_type: td.TokenType = undefined;
+
                 // zig fmt: off
-                if (conv_if_num != ut.NumError.NumConv 
+                var token_type: td.TokenType = undefined;
+                if (conv_if_num != ut.NumError.NumConv
                     and conv_if_num != ut.NumError.InvalidNumBase
-                    and conv_if_num != ut.NumError.DefaultError)
-                {
-                    token_type = td.TokenType.IMM;
-                }
-                    // zig fmt: on
-                else if (ut.containsStr(td.keyword, line[i..inner_index])) {
-                    token_type = td.TokenType.KEYWORD;
-                } else if (ut.containsStr(td.section_name, line[i..inner_index])) {
-                    token_type = td.TokenType.SECTION_NAME;
-                } else if (ut.containsStr(td.instructions_0op, line[i..inner_index])) {
-                    token_type = td.TokenType.INSTRUCTION_0OP;
-                } else if (ut.containsStr(td.instructions_1op, line[i..inner_index])) {
-                    token_type = td.TokenType.INSTRUCTION_1OP;
-                } else if (ut.containsStr(td.instructions_2op, line[i..inner_index])) {
-                    token_type = td.TokenType.INSTRUCTION_2OP;
-                } else if (ut.containsStr(td.instructions_optional_1op, line[i..inner_index])) {
-                    token_type = td.TokenType.INSTRUCTION_O1OP;
-                } else if (ut.containsStr(td.size, line[i..inner_index])) {
-                    token_type = td.TokenType.SIZE;
-                } else if (ut.containsStr(td.regs, line[i..inner_index])) {
-                    token_type = td.TokenType.REG;
-                } else {
-                    token_type = td.TokenType.IDENTIFIER;
-                }
+                    and conv_if_num != ut.NumError.DefaultError) token_type = td.TokenType.IMM
+
+                else if (eql(u8,line[i..inner_index],td.k_global)) token_type = td.TokenType.K_GLOBAL
+                else if (eql(u8,line[i..inner_index],td.k_section)) token_type = td.TokenType.K_SECTION
+                else if (eql(u8,line[i..inner_index],td.t_section)) token_type = td.TokenType.T_SECTION
+                else if (eql(u8,line[i..inner_index],td.d_section)) token_type = td.TokenType.D_SECTION
+                else if (eql(u8,line[i..inner_index],td.word)) token_type = td.TokenType.WORD
+                else if (eql(u8,line[i..inner_index],td.dword)) token_type = td.TokenType.DWORD
+                else if (eql(u8,line[i..inner_index],td.db)) token_type = td.TokenType.DB
+                else if (eql(u8,line[i..inner_index],td.dw)) token_type = td.TokenType.DW
+                else if (eql(u8,line[i..inner_index],td.dd)) token_type = td.TokenType.DD
+                else if (ut.containsStr(td.instructions_0op, line[i..inner_index])) token_type = td.TokenType.INSTRUCTION_0OP
+                else if (ut.containsStr(td.instructions_1op, line[i..inner_index])) token_type = td.TokenType.INSTRUCTION_1OP
+                else if (ut.containsStr(td.instructions_2op, line[i..inner_index])) token_type = td.TokenType.INSTRUCTION_2OP
+                else if (ut.containsStr(td.instructions_optional_1op, line[i..inner_index])) token_type = td.TokenType.INSTRUCTION_O1OP
+                else if (ut.containsStr(td.regs, line[i..inner_index])) token_type = td.TokenType.REG
+                else token_type = td.TokenType.IDENTIFIER;
+                // zig fmt: on
+
                 try tokenized_input.append(.{ .type = token_type, .value = line[i..inner_index] });
                 i = inner_index - 1;
             },

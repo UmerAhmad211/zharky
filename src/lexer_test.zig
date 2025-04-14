@@ -38,10 +38,10 @@ test "Testing section data" {
     try l.tokenizeInputStream(sec_data, &t_tokenized_input);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[0].value, "section"));
-    try expect(t_tokenized_input.items[0].type == l.td.TokenType.KEYWORD);
+    try expect(t_tokenized_input.items[0].type == l.td.TokenType.K_SECTION);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[1].value, ".data"));
-    try expect(t_tokenized_input.items[1].type == l.td.TokenType.SECTION_NAME);
+    try expect(t_tokenized_input.items[1].type == l.td.TokenType.D_SECTION);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[2].value, "\n"));
     try expect(t_tokenized_input.items[2].type == l.td.TokenType.EOL);
@@ -57,10 +57,10 @@ test "Testing section text" {
     try l.tokenizeInputStream(sec_data, &t_tokenized_input);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[0].value, "section"));
-    try expect(t_tokenized_input.items[0].type == l.td.TokenType.KEYWORD);
+    try expect(t_tokenized_input.items[0].type == l.td.TokenType.K_SECTION);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[1].value, ".text"));
-    try expect(t_tokenized_input.items[1].type == l.td.TokenType.SECTION_NAME);
+    try expect(t_tokenized_input.items[1].type == l.td.TokenType.T_SECTION);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[2].value, "\n"));
     try expect(t_tokenized_input.items[2].type == l.td.TokenType.EOL);
@@ -79,7 +79,7 @@ test "Testing Strings" {
     try expect(t_tokenized_input.items[0].type == l.td.TokenType.IDENTIFIER);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[1].value, "db"));
-    try expect(t_tokenized_input.items[1].type == l.td.TokenType.KEYWORD);
+    try expect(t_tokenized_input.items[1].type == l.td.TokenType.DB);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[2].value, "Hello, world"));
     try expect(t_tokenized_input.items[2].type == l.td.TokenType.STRING);
@@ -101,7 +101,7 @@ test "Testing Chars" {
     try expect(t_tokenized_input.items[0].type == l.td.TokenType.IDENTIFIER);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[1].value, "db"));
-    try expect(t_tokenized_input.items[1].type == l.td.TokenType.KEYWORD);
+    try expect(t_tokenized_input.items[1].type == l.td.TokenType.DB);
 
     try expect(std.mem.eql(u8, t_tokenized_input.items[2].value, "H"));
     try expect(t_tokenized_input.items[2].type == l.td.TokenType.CHAR);
