@@ -4,16 +4,13 @@ const tg_elf = @import("targets/elf.zig");
 const tg_win = @import("targets/win.zig");
 const td = @import("token_def.zig");
 const l = @import("lexer.zig");
+const p = @import("parser.zig");
 
 pub fn process(file_name: []const u8) !void {
     // allocator
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-
-    // file
-    const file = try std.fs.cwd().createFile(ut.out_file_name, .{ .truncate = false });
-    defer file.close();
 
     // allocate lines
     var lines = std.ArrayList([]const u8).init(allocator);
@@ -39,12 +36,29 @@ pub fn process(file_name: []const u8) !void {
     defer tokenized_input.deinit();
 
     // line no. to be used inform user where the error occured
-    var line_no: u32 = 1;
-    for (lines.items) |line| {
+    for (lines.items) |line|
         try l.tokenizeInputStream(line, &tokenized_input);
-        line_no += 1;
-    }
+
     try tokenized_input.append(.{ .type = td.TokenType.EOF, .value = "eof" });
 
+    printDebugLexer(&tokenized_input);
+
+    p.parse(&tokenized_input);
+    std.debug.print("Parsing success.\n", .{});
+
+    // file
+    //const file = try std.fs.cwd().createFile(ut.out_file_name, .{ .truncate = false });
+    //defer file.close();
+
     //_ = try file.writeAll(try encodings.toOwnedSlice());
+}
+
+fn printDebugLexer(tokenized_input: *std.ArrayList(l.Token)) void {
+    for (tokenized_input.items) |item| {
+        if (item.type == td.TokenType.EOL) {
+            std.debug.print("EOL--\n", .{});
+            continue;
+        }
+        std.debug.print("{s}--{}\n", .{ item.value, item.type });
+    }
 }
