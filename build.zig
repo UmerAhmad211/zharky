@@ -1,25 +1,22 @@
 const std = @import("std");
 
-const tgs = [_]std.Target.Query{
-    .{
-        .cpu_arch = .x86_64,
-        .os_tag = .linux,
-    },
-    .{
-        .cpu_arch = .x86_64,
-        .os_tag = .windows,
-    },
-};
-
 pub fn build(b: *std.Build) void {
-    for (tgs) |tg| {
-        const exe = b.addExecutable(.{
-            .name = "zhky",
-            .root_source_file = b.path("main.zig"),
-            .target = b.resolveTargetQuery(tg),
-            .optimize = .Debug,
-        });
+    const module = b.addModule("zhky", .{
+        .root_source_file = b.path("main.zig"),
+        .target = b.graph.host,
+        .optimize = .Debug,
+    });
+    const exe = b.addExecutable(.{
+        .name = "zhky",
+        .root_module = module,
+    });
+    b.installArtifact(exe);
 
-        b.installArtifact(exe);
-    }
+    const exe_check = b.addExecutable(.{
+        .name = "zhky",
+        .root_module = module,
+    });
+
+    const check = b.step("check", "Check if zhkarky compiles");
+    check.dependOn(&exe_check.step);
 }
