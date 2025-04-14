@@ -135,15 +135,12 @@ pub fn isANumOfAnyBase(num: []const u8) NumError!u32 {
     // d = decimal, h = hexa, o = octal, b = binary
     var base: u8 = 0;
     if (num.len > 0) {
-        if (num[num.len - 1] == 'h') {
-            base = 16;
-        } else if (num[num.len - 1] == 'o') {
-            base = 8;
-        } else if (num[num.len - 1] == 'b') {
-            base = 2;
-        } else if (num[num.len - 1] == 'd') {
-            base = 10;
-        } else return NumError.InvalidNumBase;
+        base = switch (num[num.len - 1]) {
+            'h' => 16,
+            'o' => 8,
+            'b' => 2,
+            else => 10,
+        };
     } else {
         return NumError.DefaultError;
     }
@@ -219,4 +216,9 @@ pub inline fn containsChar(haystack: []const u8, needle: u8) bool {
         if (i == needle) return true;
     }
     return false;
+}
+
+pub inline fn printErrMsgAndExit(err_msg: []const u8) void {
+    std.debug.print("{s}\n", .{err_msg});
+    std.process.exit(1);
 }
