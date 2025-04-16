@@ -36,15 +36,15 @@ pub fn readFileStoreAndTrim(lines: *std.ArrayList([]const u8), allocator: *const
     // err when file not found
     const file = std.fs.cwd().openFile(file_name, .{}) catch |err|
         switch (err) {
-        error.FileNotFound => {
-            std.debug.print("ZHARKY: file not found.\n", .{});
-            std.process.exit(1);
-        },
-        else => {
-            std.debug.print("ZHARKY: {}\n", .{err});
-            std.process.exit(1);
-        },
-    };
+            error.FileNotFound => {
+                std.debug.print("ZHARKY: file not found.\n", .{});
+                std.process.exit(1);
+            },
+            else => {
+                std.debug.print("ZHARKY: {}\n", .{err});
+                std.process.exit(1);
+            },
+        };
     defer file.close();
     var buf_rdr = std.io.bufferedReader(file.reader());
     const rdr = buf_rdr.reader();
@@ -55,23 +55,23 @@ pub fn readFileStoreAndTrim(lines: *std.ArrayList([]const u8), allocator: *const
         // read each line and store it in buf
         rdr.streamUntilDelimiter(buf.writer(), '\n', null) catch |err|
             switch (err) {
-            // switch on err, if end of stream append and break
-            error.EndOfStream => {
-                if (buf.items.len > 0) {
-                    // append copy of buf to lines and trim
-                    if (buf.items[0] != '\n') {
-                        const trimmed_buf = std.mem.trim(u8, buf.items, " ;\r\n\t");
-                        try lines.append(try allocator.dupe(u8, trimmed_buf));
+                // switch on err, if end of stream append and break
+                error.EndOfStream => {
+                    if (buf.items.len > 0) {
+                        // append copy of buf to lines and trim
+                        if (buf.items[0] != '\n') {
+                            const trimmed_buf = std.mem.trim(u8, buf.items, " ;\r\n\t");
+                            try lines.append(try allocator.dupe(u8, trimmed_buf));
+                        }
                     }
-                }
-                break;
-            },
-            // err out
-            else => {
-                std.debug.print("Err: {}\n", .{err});
-                std.process.exit(1);
-            },
-        };
+                    break;
+                },
+                // err out
+                else => {
+                    std.debug.print("Err: {}\n", .{err});
+                    std.process.exit(1);
+                },
+            };
         // append copy of buf to lines and trim
         if (buf.items.len > 0) {
             if (buf.items[0] != '\n') {
