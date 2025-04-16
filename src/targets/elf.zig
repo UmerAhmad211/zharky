@@ -32,7 +32,7 @@ pub fn tgELF32(encodings: *std.ArrayList(u8)) !void {
     try encodings.append(0);
     // e_entry
     try encodings.append(0);
-    try encodings.append(90);
+    try encodings.append(0x80);
     try encodings.append(4);
     try encodings.append(8);
     // e_phoff prgram header tables file offset
@@ -60,7 +60,7 @@ pub fn tgELF32(encodings: *std.ArrayList(u8)) !void {
     try encodings.append(2);
     try encodings.append(0);
     // e_shentsize
-    try encodings.append(0x28);
+    try encodings.append(0);
     try encodings.append(0);
     // e_shnum
     try encodings.append(0);
@@ -79,7 +79,7 @@ pub fn tgELF32(encodings: *std.ArrayList(u8)) !void {
     try encodings.append(0);
     try encodings.append(0);
     // p_offset
-    // ELF_header = 52 bytes, 2 program headers = 2 x 32 bytes
+    // ELF_header = 52 bytes +  2 program headers = 2 x 32 bytes
     try encodings.append(0x74);
     try encodings.append(0);
     try encodings.append(0);
