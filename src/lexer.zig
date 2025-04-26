@@ -1,37 +1,45 @@
 const std = @import("std");
-const ut = @import("util.zig");
-pub const td = @import("token_def.zig");
 const eql = std.mem.eql;
 
+pub const td = @import("token_def.zig");
+const ut = @import("util.zig");
+const red = @import("pretty_print_errs.zig").red;
+const reset = @import("pretty_print_errs.zig").reset;
+
+// zig fmt: off
 pub const Token = struct {
     type: td.TokenType,
     value: []const u8,
+    curr_line: []const u8,
+    row_no: usize,
+    col_no: usize
 };
+// zig fmt: on
 
-pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Token)) !void {
+pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Token), line_no: *usize) !void {
     var i: usize = 0;
 
     while (i < line.len) : (i += 1) {
         switch (line[i]) {
-            ',' => try tokenized_input.append(.{ .type = td.TokenType.COMMA, .value = "," }),
-            '[' => try tokenized_input.append(.{ .type = td.TokenType.O_BRACKET, .value = "[" }),
-            ']' => try tokenized_input.append(.{ .type = td.TokenType.C_BRACKET, .value = "]" }),
-            ':' => try tokenized_input.append(.{ .type = td.TokenType.COLON, .value = ":" }),
-            '+' => try tokenized_input.append(.{ .type = td.TokenType.PLUS, .value = "+" }),
-            '-' => try tokenized_input.append(.{ .type = td.TokenType.MINUS, .value = "-" }),
+            ',' => try tokenized_input.append(.{ .type = td.TokenType.COMMA, .value = ",", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
+            '[' => try tokenized_input.append(.{ .type = td.TokenType.O_BRACKET, .value = "[", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
+            ']' => try tokenized_input.append(.{ .type = td.TokenType.C_BRACKET, .value = "]", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
+            ':' => try tokenized_input.append(.{ .type = td.TokenType.COLON, .value = ":", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
+            '+' => try tokenized_input.append(.{ .type = td.TokenType.PLUS, .value = "+", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
+            '-' => try tokenized_input.append(.{ .type = td.TokenType.MINUS, .value = "-", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
             ' ' => {}, //skip whitesapces
             '\'' => {
                 // 'A','2'
                 if ((i + 2 < line.len) and line[i + 2] == '\'') {
                     if (std.ascii.isDigit(line[i + 1])) {
-                        try tokenized_input.append(.{ .type = td.TokenType.NUM, .value = line[i + 1 .. i + 2] });
+                        try tokenized_input.append(.{ .type = td.TokenType.NUM, .value = line[i + 1 .. i + 2], .curr_line = line, .row_no = line_no.*, .col_no = i + 1 });
                     } else if (std.ascii.isASCII(line[i + 1])) {
-                        try tokenized_input.append(.{ .type = td.TokenType.CHAR, .value = line[i + 1 .. i + 2] });
+                        try tokenized_input.append(.{ .type = td.TokenType.CHAR, .value = line[i + 1 .. i + 2], .curr_line = line, .row_no = line_no.*, .col_no = i + 1 });
                     }
                     i += 2;
                 } else {
                     // not finding closing single quote
-                    std.debug.print("ZHARKY: Error: Unexpected token.\n", .{});
+                    std.debug.print("ZHARKY:" ++ red ++ " Error:" ++ reset ++ " Unexpected token:{d}:{d}\n", .{ line_no.*, i + 1 });
                     std.process.exit(1);
                 }
             },
@@ -47,11 +55,11 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                     inner_index += 1;
                 }
                 if (inner_index < line.len and enc_end_quote) {
-                    try tokenized_input.append(.{ .type = td.TokenType.STRING, .value = line[i + 1 .. inner_index] });
+                    try tokenized_input.append(.{ .type = td.TokenType.STRING, .value = line[i + 1 .. inner_index], .curr_line = line, .row_no = line_no.*, .col_no = i + 1 });
                     i = inner_index;
                 } else {
                     // not finding closing double quote
-                    std.debug.print("ZHARKY: Error: Unexpected token.\n", .{});
+                    std.debug.print("ZHARKY:" ++ red ++ " Error:" ++ reset ++ " Unexpected token:{d}:{d}\n", .{ line_no.*, i + 1 });
                     std.process.exit(1);
                 }
             },
@@ -67,7 +75,7 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                 }
 
                 // check on tokens
-                const conv_if_num = ut.isANumOfAnyBase(line[i..inner_index]);
+                const conv_if_num = ut.isANumOfAnyBase(line[i..inner_index], .IMM);
 
                 // zig fmt: off
                 var token_type: td.TokenType = undefined;
@@ -82,7 +90,6 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                 else if (eql(u8,line[i..inner_index],td.word)) token_type = td.TokenType.WORD
                 else if (eql(u8,line[i..inner_index],td.dword)) token_type = td.TokenType.DWORD
                 else if (eql(u8,line[i..inner_index],td.db)) token_type = td.TokenType.DB
-                else if (eql(u8,line[i..inner_index],td.dw)) token_type = td.TokenType.DW
                 else if (eql(u8,line[i..inner_index],td.dd)) token_type = td.TokenType.DD
                 else if (ut.containsStr(td.instructions_0op, line[i..inner_index])) token_type = td.TokenType.INSTRUCTION_0OP
                 else if (ut.containsStr(td.instructions_1op, line[i..inner_index])) token_type = td.TokenType.INSTRUCTION_1OP
@@ -92,11 +99,11 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                 else token_type = td.TokenType.IDENTIFIER;
                 // zig fmt: on
 
-                try tokenized_input.append(.{ .type = token_type, .value = line[i..inner_index] });
+                try tokenized_input.append(.{ .type = token_type, .value = line[i..inner_index], .curr_line = line, .row_no = line_no.*, .col_no = i + 1 });
                 i = inner_index - 1;
             },
         }
     }
     // EOL to separate each instruction
-    try tokenized_input.append(.{ .type = td.TokenType.EOL, .value = "\n" });
+    try tokenized_input.append(.{ .type = td.TokenType.EOL, .value = "\n", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 });
 }
