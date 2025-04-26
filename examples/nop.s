@@ -5,6 +5,5 @@ section .data
 section .text
 	global _start
 
-_start:
+_start
 	nop
-
