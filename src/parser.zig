@@ -206,9 +206,7 @@ fn createMem() compilerError!operand {
     nextToken();
 
     if (curr_token.type == .C_BRACKET) {
-        nextToken();
-        if (curr_token.type == .EOL) {
-            nextToken();
+        if (seekToken() == .EOL) {
             return n_op;
         }
         return compilerError.syntaxError;
@@ -310,7 +308,8 @@ fn checkOperands() compilerError!instruction {
             seekd_token = seekToken();
             if(seekd_token == .REG or seekd_token == .O_BRACKET or seekd_token == .IMM or seekd_token == .IDENTIFIER){
                 nextToken();
-                if(seekd_token == .O_BRACKET){
+                if(curr_token.type == .O_BRACKET){
+                    nextToken();
                     if(n_inst.op1.?.op_type == .MEM) {return compilerError.invalidOperand;}
                     else {n_op2 = createMem() catch |err| return err;}
                 }
