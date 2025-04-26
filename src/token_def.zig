@@ -11,10 +11,10 @@ pub const TokenType = enum {
     WORD,
     DWORD,
     DB,
-    DW,
     DD,
     REG,
     IDENTIFIER,
+    MEM,
     // literals
     IMM,
     STRING,
@@ -41,23 +41,17 @@ pub const k_section = "section";
 pub const t_section = ".text";
 pub const d_section = ".data";
 
-pub const instructions_0op = [_][]const u8{
-    "hlt", "nop", "pusha", "popa", "iret",
-};
+pub const instructions_0op = [_][]const u8{ "hlt", "nop" };
 
 pub const instructions_1op = [_][]const u8{
-    "mul",  "div", "pop", "push", "int", "neg",
-    "jmp",  "ja",  "jae", "jb",   "jbe", "jg",
-    "jge",  "jl",  "jle", "je",   "jne", "jc",
-    "jnc",  "jo",  "jno", "js",   "jns", "loop",
-    "call", "dec", "inc", "not",
+    "mul", "div", "pop", "push", "int",  "neg",
+    "jmp", "je",  "jne", "loop", "call", "dec",
+    "inc", "not",
 };
 
 pub const instructions_2op = [_][]const u8{
-    "mov", "add", "adc", "sub", "cmp",  "xor",
-    "and", "or",  "lea", "sbb", "xchg", "test",
-    "shl", "shr", "sar", "ror", "rol",  "rcl",
-    "rcr",
+    "mov", "add", "adc",  "sub", "cmp", "xor",
+    "and", "or",  "test",
 };
 
 pub const instructions_optional_1op = [_][]const u8{
@@ -68,13 +62,12 @@ pub const word = "word";
 pub const dword = "dword";
 
 pub const db = "db";
-pub const dw = "dw";
 pub const dd = "dd";
 
 pub const regs = [_][]const u8{
-    "ax",  "eax", "bx",  "ebx", "cx",  "ecx",
-    "dx",  "si",  "esi", "di",  "edi", "bp",
-    "ebp", "sp",  "esp",
+    "eax", "ebx", "ecx",
+    "edx", "esi", "edi",
+    "ebp", "esp",
 };
 
 pub const single_char = [_]u8{
