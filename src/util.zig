@@ -1,9 +1,18 @@
 const std = @import("std");
 
+const td = @import("token_def.zig");
+
 pub const NumError = error{ InvalidNumBase, NumConv, DefaultError };
 pub const AsmError = error{InvalidRegister};
 pub var out_file_name: []const u8 = undefined;
 pub var out_file_type: []const u8 = undefined;
+
+pub const Number = union {
+    int_i8: i8,
+    int_i32: i32,
+    int_u32: u32,
+    slice: []const u8,
+};
 
 // operand types
 pub const OperandsType = enum {
@@ -17,12 +26,17 @@ pub const OperandsType = enum {
 
 // only .asm files allowed
 pub fn validFileExtension(file_name: []const u8) bool {
-    const asm_extension: []const u8 = ".asm";
+    const asm_extension = ".asm";
+    const s_extension = ".s";
     // rets index of where .asm is found
     const validator = std.mem.indexOf(u8, file_name, asm_extension);
     // save index
     if (validator) |_| {
         return true;
+    } else {
+        const validator_s = std.mem.indexOf(u8, file_name, s_extension);
+        if (validator_s) |_|
+            return true;
     }
     return false;
 }
@@ -34,17 +48,7 @@ pub fn readFileStoreAndTrim(lines: *std.ArrayList([]const u8), allocator: *const
 
     // file
     // err when file not found
-    const file = std.fs.cwd().openFile(file_name, .{}) catch |err|
-        switch (err) {
-            error.FileNotFound => {
-                std.debug.print("ZHARKY: file not found.\n", .{});
-                std.process.exit(1);
-            },
-            else => {
-                std.debug.print("ZHARKY: {}\n", .{err});
-                std.process.exit(1);
-            },
-        };
+    const file = try std.fs.cwd().openFile(file_name, .{});
     defer file.close();
     var buf_rdr = std.io.bufferedReader(file.reader());
     const rdr = buf_rdr.reader();
@@ -86,54 +90,29 @@ pub fn retRegValues(reg: []const u8) AsmError!u8 {
     // returns registers values or error
     if (std.ascii.eqlIgnoreCase(reg, "ax")) {
         return 0;
-    } else if (std.ascii.eqlIgnoreCase(reg, "cx")) {
+    } else if (std.ascii.eqlIgnoreCase(reg, "ecx")) {
         return 1;
-    } else if (std.ascii.eqlIgnoreCase(reg, "dx")) {
+    } else if (std.ascii.eqlIgnoreCase(reg, "edx")) {
         return 2;
-    } else if (std.ascii.eqlIgnoreCase(reg, "bx")) {
+    } else if (std.ascii.eqlIgnoreCase(reg, "ebx")) {
         return 3;
-    } else if (std.ascii.eqlIgnoreCase(reg, "sp")) {
+    } else if (std.ascii.eqlIgnoreCase(reg, "esp")) {
         return 4;
-    } else if (std.ascii.eqlIgnoreCase(reg, "bp")) {
+    } else if (std.ascii.eqlIgnoreCase(reg, "ebp")) {
         return 5;
-    } else if (std.ascii.eqlIgnoreCase(reg, "si")) {
+    } else if (std.ascii.eqlIgnoreCase(reg, "esi")) {
         return 6;
-    } else if (std.ascii.eqlIgnoreCase(reg, "di")) {
+    } else if (std.ascii.eqlIgnoreCase(reg, "edi")) {
         return 7;
     } else return AsmError.InvalidRegister;
 }
 
-pub fn retOperandsType(op1: []const u8, op2: []const u8) OperandsType {
-    // valid operands
-    // mov$ ax% bx%
-    if (retRegValues(op1) != AsmError.InvalidRegister and
-        retRegValues(op2) != AsmError.InvalidRegister)
-    {
-        return OperandsType.regToReg;
-    }
-    // mov$ ax% 10h%
-    else if (retRegValues(op1) != AsmError.InvalidRegister and isANumOfAnyBase(op2) != NumError.InvalidNumBase) {
-        return OperandsType.constToReg;
-    }
-    // mov% [reg or num]% ax%
-    else if (isValidMemAddrStyle(op1) and retRegValues(op2) != AsmError.InvalidRegister) {
-        return OperandsType.regToMem;
-    }
-    // mov$ ax% [reg or num]%
-    else if (retRegValues(op1) != AsmError.InvalidRegister and isValidMemAddrStyle(op2)) {
-        return OperandsType.memToReg;
-    }
-    // mov$ [reg or num] 78d%
-    else if (isValidMemAddrStyle(op1) and isANumOfAnyBase(op2) != NumError.InvalidNumBase) {
-        return OperandsType.constToMem;
-    } else return OperandsType.noExist;
-}
-
 // max 32 bit number
-pub fn isANumOfAnyBase(num: []const u8) NumError!u32 {
+pub fn isANumOfAnyBase(num: []const u8, num_type: td.TokenType) NumError!Number {
+    // MINUS and PLUS are symbols i.e: +32 -> PLUS and -32 -> MINUS
     // postfix check
     // d = decimal, h = hexa, o = octal, b = binary
-    var base: u8 = 0;
+    var base: u8 = undefined;
     if (num.len > 0) {
         base = switch (num[num.len - 1]) {
             'h' => 16,
@@ -144,30 +123,42 @@ pub fn isANumOfAnyBase(num: []const u8) NumError!u32 {
     } else {
         return NumError.DefaultError;
     }
-    // convert or return err
-    const conv_num: u32 = std.fmt.parseInt(u32, num[0 .. num.len - 1], base) catch return NumError.NumConv;
-    return conv_num;
-}
+    var conv_num: Number = undefined;
 
-fn isValidMemAddrStyle(mem_addr: []const u8) bool {
-    // [] => style
-    if (mem_addr[0] != '[' and mem_addr[mem_addr.len - 1] != ']') {
-        return false;
-    } else { // check or return false
-        const num = mem_addr[1 .. mem_addr.len - 2];
-        if (isANumOfAnyBase(num) != NumError.InvalidNumBase or retRegValues(num) != AsmError.InvalidRegister)
-            return true;
-        return false;
+    // slice based on type
+    const conv_str = switch (base) {
+        10 => num[0..num.len],
+        else => num[0 .. num.len - 1],
+    };
+
+    // convert or return err
+    // if IMM return u32
+    if (num_type == .IMM) {
+        conv_num = Number{ .int_u32 = std.fmt.parseInt(u32, conv_str, base) catch return NumError.NumConv };
+    } else if (num_type == .PLUS or num_type == .MINUS) {
+        // i32 disp
+        conv_num = Number{ .int_i32 = std.fmt.parseInt(i32, conv_str, base) catch return NumError.NumConv };
+        // if MINUS, negate number
+        if (num_type == .MINUS)
+            conv_num = Number{ .int_i32 = -conv_num.int_i32 };
+        // if fits i8 disp return that
+        if (conv_num.int_i32 >= std.math.minInt(i8) and conv_num.int_i32 <= std.math.maxInt(i8)) {
+            const conv_num_i8: i8 = @intCast(conv_num.int_i32);
+            return Number{ .int_i8 = conv_num_i8 };
+        }
+    } else {
+        // @compileError("isANumOfAnyBase only accepts IMM, PLUS or MINUS.");
     }
+    return conv_num;
 }
 
 pub fn printHelp() !void {
     const zhky_usage =
-        \\ zhky <file_name> -o <out_file_name> -<out_file_type>
-        \\ Example:
-        \\ zhky main.asm -o main -elf32 
-        \\ Note: As of now zharky only emits Windows (win32), Linux (elf32) and DOS (dos) executables.
-        \\ zharky supports cross compilation.
+        \\zhky <file_name> -o <out_file_name> -<out_file_type>
+        \\Example:
+        \\zhky main.asm -o main -elf32 
+        \\Note: As of now zharky only emits Windows (PE32), Linux (elf32) and DOS (dos) executables.
+        \\zharky supports cross compilation.
     ;
 
     // dont make this global, wont compile for windows
@@ -182,18 +173,18 @@ pub fn assemblerDriver(args: [][:0]u8) !void {
             try printHelp();
             std.process.exit(0);
         }
-        std.debug.print("ZHARKY: Wrong args.\n", .{});
+        std.debug.print("ZHARKY: Wrong arguments.Type zhky help to get more info.\n", .{});
         std.process.exit(1);
     } else if (args.len != 5) {
-        std.debug.print("ZHARKY: Wrong args.\n", .{});
+        std.debug.print("ZHARKY: Wrong arguments.Type zhky help to get more info.\n", .{});
         std.process.exit(1);
     } else if (!validFileExtension(args[1])) {
-        std.debug.print("ZHARKY: Wrong args.\n", .{});
+        std.debug.print("ZHARKY: Wrong arguments.Type zhky help to get more info.\n", .{});
         std.process.exit(1);
     }
 
     // only available targets
-    if (!(std.mem.eql(u8, args[4], "-win32") or
+    if (!(std.mem.eql(u8, args[4], "-pe32") or
         std.mem.eql(u8, args[4], "-elf32") or
         std.mem.eql(u8, args[4], "-dos")))
     {
@@ -216,9 +207,4 @@ pub inline fn containsChar(haystack: []const u8, needle: u8) bool {
         if (i == needle) return true;
     }
     return false;
-}
-
-pub inline fn printErrMsgAndExit(err_msg: []const u8) void {
-    std.debug.print("{s}\n", .{err_msg});
-    std.process.exit(1);
 }
