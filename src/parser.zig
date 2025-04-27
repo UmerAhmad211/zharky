@@ -206,10 +206,14 @@ fn createMem() compilerError!operand {
     nextToken();
 
     if (curr_token.type == .C_BRACKET) {
-        if (seekToken() == .EOL) {
+        const seekd_token = seekToken();
+        if (seekd_token == .EOL) {
             return n_op;
+        } else if (seekd_token == .COMMA) {
+            return n_op;
+        } else {
+            return compilerError.syntaxError;
         }
-        return compilerError.syntaxError;
     } else if (curr_token.type == .PLUS) {} else if (curr_token.type == .MINUS) {
         pm = 1;
     } else {
@@ -225,6 +229,13 @@ fn createMem() compilerError!operand {
             n_op.disp = ut.isANumOfAnyBase(curr_token.value, .MINUS) catch return compilerError.wrongNumFormat;
         } else {
             n_op.disp = ut.isANumOfAnyBase(curr_token.value, .IMM) catch return compilerError.wrongNumFormat;
+        }
+        nextToken();
+        if (curr_token.type == .C_BRACKET) {
+            const seekd_token = seekToken();
+            if (seekd_token == .EOL or seekd_token == .COMMA) {}
+        } else {
+            return compilerError.syntaxError;
         }
     } else {
         return compilerError.syntaxError;
@@ -336,6 +347,7 @@ fn checkOperands() compilerError!instruction {
                 n_inst.opcode = curr_token;
                 nextToken();
                 if(seekd_token == .O_BRACKET){
+                    nextToken();
                     n_op = createMem() catch |err| return err;
                 }
                 else {
