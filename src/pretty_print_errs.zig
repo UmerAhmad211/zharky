@@ -5,12 +5,10 @@ const l = @import("lexer.zig");
 
 pub const compilerErrors = error{
     invalidOperand,
-    missingOperand,
+    wrongDataId,
     syntaxError,
-    unexpectedEOL,
-    unexpectedEOF,
+    unidentifiedInst,
     eaxNoDisp,
-    wrongNumFormat,
     onlyLabel,
 };
 
@@ -30,32 +28,24 @@ pub fn printErrMsgAndExit(token: *errorToken) void {
             print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Invalid operand:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
         },
-        compilerErrors.missingOperand => {
-            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Missing operand:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
-            printErrLine(token);
-        },
         compilerErrors.syntaxError => {
             print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Syntax error:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
-            printErrLine(token);
-        },
-        compilerErrors.unexpectedEOL => {
-            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Unexpected EOL:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
-            printErrLine(token);
-        },
-        compilerErrors.unexpectedEOF => {
-            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Unexpected EOF:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
         },
         compilerErrors.eaxNoDisp => {
             print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "EAX takes no displacement:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
         },
-        compilerErrors.wrongNumFormat => {
-            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Wrong number format:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
-            printErrLine(token);
-        },
         compilerErrors.onlyLabel => {
             print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Only Label here:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            printErrLine(token);
+        },
+        compilerErrors.wrongDataId => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Wrong data identifier:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            printErrLine(token);
+        },
+        compilerErrors.unidentifiedInst => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Unidentified instruction:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
         },
     }
