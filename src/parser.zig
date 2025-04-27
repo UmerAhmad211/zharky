@@ -60,7 +60,7 @@ pub fn parse(tokenized_input: *std.ArrayList(l.Token), err_tok: *errorToken) boo
 // check data section key words i.e: section .data\n
 fn expectDataSection() compilerError!void {
     const valid_token_arr = [3]TokenType{ .K_SECTION, .D_SECTION, .EOL };
-    inline for (valid_token_arr) |tok| {
+    for (valid_token_arr) |tok| {
         if (curr_token.type == tok) {
             nextToken();
         } else {
@@ -73,7 +73,7 @@ fn expectDataSection() compilerError!void {
 // global _start\n
 fn expectTextSection() compilerError!void {
     const valid_token_arr = [6]TokenType{ .K_SECTION, .T_SECTION, .EOL, .K_GLOBAL, .IDENTIFIER, .EOL };
-    inline for (valid_token_arr) |tok| {
+    for (valid_token_arr) |tok| {
         if (curr_token.type == tok) {
             nextToken();
         } else {
@@ -92,7 +92,7 @@ fn expectData() compilerError!void {
         // zig fmt: off
         if (curr_token.type == .DB 
             or curr_token.type == .DD) nextToken() else {
-            return compilerError.syntaxError;
+            return compilerError.wrongDataId;
         }
         // zig fmt: on
         if (!checkForDataCommaPattern()) {
@@ -129,7 +129,7 @@ fn expectText() compilerError!void {
             inst_line = checkOperands() catch |err| return err;
         }
         else {
-            return compilerError.syntaxError;
+            return compilerError.unidentifiedInst;
         }
 
         if (curr_token.type != .EOL) {
@@ -193,7 +193,7 @@ fn createMem() compilerError!operand {
     if (curr_token.type == .IDENTIFIER) {
         n_op.value = Number{ .slice = curr_token.value };
     } else if (curr_token.type == .IMM) {
-        n_op.disp = ut.isANumOfAnyBase(curr_token.value, .IMM) catch return compilerError.wrongNumFormat;
+        n_op.disp = ut.isANumOfAnyBase(curr_token.value, .IMM) catch return compilerError.syntaxError;
     } else if (curr_token.type == .REG) {
         if (eql(u8, curr_token.value, "eax")) {
             const seekd_token = seekToken();
@@ -201,7 +201,7 @@ fn createMem() compilerError!operand {
         }
         n_op.value = Number{ .slice = curr_token.value };
     } else {
-        return compilerError.syntaxError;
+        return compilerError.invalidOperand;
     }
     nextToken();
 
@@ -224,18 +224,19 @@ fn createMem() compilerError!operand {
 
     if (curr_token.type == .IMM) {
         if (pm == 0) {
-            n_op.disp = ut.isANumOfAnyBase(curr_token.value, .PLUS) catch return compilerError.wrongNumFormat;
+            n_op.disp = ut.isANumOfAnyBase(curr_token.value, .PLUS) catch return compilerError.syntaxError;
         } else if (pm == 1) {
-            n_op.disp = ut.isANumOfAnyBase(curr_token.value, .MINUS) catch return compilerError.wrongNumFormat;
+            n_op.disp = ut.isANumOfAnyBase(curr_token.value, .MINUS) catch return compilerError.syntaxError;
         } else {
-            n_op.disp = ut.isANumOfAnyBase(curr_token.value, .IMM) catch return compilerError.wrongNumFormat;
+            n_op.disp = ut.isANumOfAnyBase(curr_token.value, .IMM) catch return compilerError.syntaxError;
         }
         nextToken();
         if (curr_token.type == .C_BRACKET) {
             const seekd_token = seekToken();
+            // .COMMA for if MEM in first operand
             if (seekd_token == .EOL or seekd_token == .COMMA) {}
         } else {
-            return compilerError.syntaxError;
+            return compilerError.invalidOperand;
         }
     } else {
         return compilerError.syntaxError;
@@ -296,7 +297,7 @@ fn checkOperands() compilerError!instruction {
                 n_inst.op1 = n_op;
             }
         }
-        else {return compilerError.syntaxError;}
+        else {return compilerError.invalidOperand;}
     }
     else if(curr_token.type == .INSTRUCTION_2OP){
             var n_op2: operand = undefined;
@@ -328,12 +329,12 @@ fn checkOperands() compilerError!instruction {
                     n_op2.op_type = curr_token.type;
                     if(curr_token.type == .REG or curr_token.type == .IDENTIFIER)
                         n_op2.value = Number{.slice = curr_token.value} else {
-                        n_op2.value = ut.isANumOfAnyBase(curr_token.value,.IMM) catch return compilerError.wrongNumFormat;
+                        n_op2.value = ut.isANumOfAnyBase(curr_token.value,.IMM) catch return compilerError.syntaxError;
                     }
                 }
                 n_inst.op2 = n_op2;
             }
-            else {return compilerError.syntaxError;}
+            else {return compilerError.invalidOperand;}
         }
         else if(eql(u8, curr_token.value, "add")
              or eql(u8, curr_token.value, "adc")
@@ -364,7 +365,7 @@ fn checkOperands() compilerError!instruction {
                 n_op2.op_type = curr_token.type;
                 if(curr_token.type == .REG)
                     n_op2.value = Number{.slice = curr_token.value} else {
-                    n_op2.value = ut.isANumOfAnyBase(curr_token.value,.IMM) catch return compilerError.wrongNumFormat; 
+                    n_op2.value = ut.isANumOfAnyBase(curr_token.value,.IMM) catch return compilerError.syntaxError; 
                 }
             }
             else {return compilerError.syntaxError;}
@@ -375,11 +376,11 @@ fn checkOperands() compilerError!instruction {
         if(seekd_token == .IMM){
             nextToken();
             n_op.op_type = seekd_token;
-            const convd_num = ut.isANumOfAnyBase(curr_token.value,.IMM) catch return compilerError.wrongNumFormat;
+            const convd_num = ut.isANumOfAnyBase(curr_token.value,.IMM) catch return compilerError.syntaxError;
             n_op.value = convd_num;
             n_inst.op1 = n_op;
         }
-        else if(seekd_token == .EOL){nextToken();}
+        else if(seekd_token == .EOL) {}
         else {return compilerError.syntaxError;}    
     }
     else {return compilerError.syntaxError;}
