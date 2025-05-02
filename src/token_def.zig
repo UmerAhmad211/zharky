@@ -23,12 +23,9 @@ pub const TokenType = enum {
     O_BRACKET,
     C_BRACKET,
     COLON,
-    PLUS,
-    MINUS,
     S_QUOTE,
     D_QUOTE,
     CHAR,
-    NUM,
     EOL,
     // end of file
     ERR,
