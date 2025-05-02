@@ -1,15 +1,30 @@
 const std = @import("std");
 
+const compilerError = @import("pretty_print_errs.zig").compilerErrors;
+const errorToken = @import("pretty_print_errs.zig").errorToken;
+const s = @import("symb_table.zig");
+const symbol = s.Symbol;
 const td = @import("token_def.zig");
 
-pub const NumError = error{ InvalidNumBase, NumConv, DefaultError };
 pub const AsmError = error{InvalidRegister};
 pub var out_file_name: []const u8 = undefined;
 pub var out_file_type: []const u8 = undefined;
 
-pub const Number = union {
-    int_i8: i8,
-    int_i32: i32,
+pub const Line = struct {
+    ln: []const u8,
+    ln_no: usize,
+};
+
+pub const numberType = enum {
+    int_u16,
+    int_u8,
+    int_u32,
+    slice,
+};
+
+pub const Number = union(numberType) {
+    int_u16: u16,
+    int_u8: u8,
     int_u32: u32,
     slice: []const u8,
 };
@@ -41,7 +56,7 @@ pub fn validFileExtension(file_name: []const u8) bool {
     return false;
 }
 
-pub fn readFileStoreAndTrim(lines: *std.ArrayList([]const u8), allocator: *const std.mem.Allocator, file_name: []const u8) !void {
+pub fn readFileStoreAndTrim(lines: *std.MultiArrayList(Line), allocator: *const std.mem.Allocator, file_name: []const u8) !void {
     // buffer i.e: file line
     var buf = std.ArrayList(u8).init(allocator.*);
     defer buf.deinit();
@@ -50,11 +65,13 @@ pub fn readFileStoreAndTrim(lines: *std.ArrayList([]const u8), allocator: *const
     // err when file not found
     const file = try std.fs.cwd().openFile(file_name, .{});
     defer file.close();
+
     var buf_rdr = std.io.bufferedReader(file.reader());
     const rdr = buf_rdr.reader();
 
+    var line_no: usize = 1;
+
     while (true) {
-        // clear buf each time
         buf.clearRetainingCapacity();
         // read each line and store it in buf
         rdr.streamUntilDelimiter(buf.writer(), '\n', null) catch |err|
@@ -62,27 +79,22 @@ pub fn readFileStoreAndTrim(lines: *std.ArrayList([]const u8), allocator: *const
                 // switch on err, if end of stream append and break
                 error.EndOfStream => {
                     if (buf.items.len > 0) {
-                        // append copy of buf to lines and trim
-                        if (buf.items[0] != '\n') {
-                            const trimmed_buf = std.mem.trim(u8, buf.items, " ;\r\n\t");
-                            try lines.append(try allocator.dupe(u8, trimmed_buf));
-                        }
+                        const trimmed_buf = std.mem.trim(u8, buf.items, " \r\t");
+                        try lines.append(allocator.*, .{ .ln = try allocator.dupe(u8, trimmed_buf), .ln_no = line_no });
                     }
                     break;
                 },
                 // err out
                 else => {
-                    std.debug.print("Err: {}\n", .{err});
-                    std.process.exit(1);
+                    return compilerError.fileReadError;
                 },
             };
         // append copy of buf to lines and trim
         if (buf.items.len > 0) {
-            if (buf.items[0] != '\n') {
-                const trimmed_buf = std.mem.trim(u8, buf.items, " ;\r\n\t");
-                try lines.append(try allocator.dupe(u8, trimmed_buf));
-            }
+            const trimmed_buf = std.mem.trim(u8, buf.items, " \r\t");
+            try lines.append(allocator.*, .{ .ln = try allocator.dupe(u8, trimmed_buf), .ln_no = line_no });
         }
+        line_no += 1;
     }
 }
 
@@ -108,7 +120,7 @@ pub fn retRegValues(reg: []const u8) AsmError!u8 {
 }
 
 // max 32 bit number
-pub fn isANumOfAnyBase(num: []const u8, num_type: td.TokenType) NumError!Number {
+pub fn isANumOfAnyBase(num: []const u8, allow_u8: u1) compilerError!Number {
     // MINUS and PLUS are symbols i.e: +32 -> PLUS and -32 -> MINUS
     // postfix check
     // d = decimal, h = hexa, o = octal, b = binary
@@ -121,7 +133,7 @@ pub fn isANumOfAnyBase(num: []const u8, num_type: td.TokenType) NumError!Number 
             else => 10,
         };
     } else {
-        return NumError.DefaultError;
+        return compilerError.programError;
     }
     var conv_num: Number = undefined;
 
@@ -132,22 +144,10 @@ pub fn isANumOfAnyBase(num: []const u8, num_type: td.TokenType) NumError!Number 
     };
 
     // convert or return err
-    // if IMM return u32
-    if (num_type == .IMM) {
-        conv_num = Number{ .int_u32 = std.fmt.parseInt(u32, conv_str, base) catch return NumError.NumConv };
-    } else if (num_type == .PLUS or num_type == .MINUS) {
-        // i32 disp
-        conv_num = Number{ .int_i32 = std.fmt.parseInt(i32, conv_str, base) catch return NumError.NumConv };
-        // if MINUS, negate number
-        if (num_type == .MINUS)
-            conv_num = Number{ .int_i32 = -conv_num.int_i32 };
-        // if fits i8 disp return that
-        if (conv_num.int_i32 >= std.math.minInt(i8) and conv_num.int_i32 <= std.math.maxInt(i8)) {
-            const conv_num_i8: i8 = @intCast(conv_num.int_i32);
-            return Number{ .int_i8 = conv_num_i8 };
-        }
-    } else {
-        // @compileError("isANumOfAnyBase only accepts IMM, PLUS or MINUS.");
+    conv_num = Number{ .int_u32 = std.fmt.parseInt(u32, conv_str, base) catch return compilerError.programError };
+    if ((allow_u8 == 0) and conv_num.int_u32 >= std.math.minInt(u8) and conv_num.int_u32 <= std.math.maxInt(u8)) {
+        const conv_num_i8: u8 = @intCast(conv_num.int_u32);
+        return Number{ .int_u8 = conv_num_i8 };
     }
     return conv_num;
 }
@@ -188,7 +188,7 @@ pub fn assemblerDriver(args: [][:0]u8) !void {
         std.mem.eql(u8, args[4], "-elf32") or
         std.mem.eql(u8, args[4], "-dos")))
     {
-        std.debug.print("ZHARKY: No such target exists. Use -elf32, -win32 or -dos.", .{});
+        std.debug.print("ZHARKY: No such target exists. Use -elf32, -pe32 or -dos.", .{});
         std.process.exit(1);
     }
     out_file_type = args[4];
@@ -207,4 +207,38 @@ pub inline fn containsChar(haystack: []const u8, needle: u8) bool {
         if (i == needle) return true;
     }
     return false;
+}
+
+pub fn createSymbol(d_size: usize, offset: *usize, t_type: td.TokenType, d_value: Number) compilerError!void {
+    switch (t_type) {
+        .CHAR => {
+            if (d_size == 0) offset.* += 1 else {
+                return compilerError.stringCharNoDD;
+            }
+        },
+        .STRING => {
+            if (d_size == 0)
+                offset.* = d_value.slice.len
+            else {
+                return compilerError.stringCharNoDD;
+            }
+        },
+        .IMM => {
+            if (d_size == 0 and d_value == .int_u8) offset.* += 1 else if (d_size == 1 and d_value == .int_u32) offset.* += 1 else {
+                return compilerError.syntaxError;
+            }
+        },
+        else => return compilerError.notWorking,
+    }
+}
+
+pub fn retNumOfBytes(num: Number) compilerError!usize {
+    switch (num) {
+        numberType.int_u32 => return 4,
+        numberType.int_u8 => return 1,
+        numberType.int_u16 => return 2,
+        numberType.slice => {
+            return compilerError.invalidOperand;
+        },
+    }
 }
