@@ -9,7 +9,13 @@ pub const compilerErrors = error{
     syntaxError,
     unidentifiedInst,
     eaxNoDisp,
-    onlyLabel,
+    stringCharNoDD,
+    notWorking,
+    programError,
+    dupeLabel,
+    fileReadError,
+    onlyASCII,
+    noClosingQuote,
 };
 
 pub const errorToken = struct {
@@ -36,16 +42,39 @@ pub fn printErrMsgAndExit(token: *errorToken) void {
             print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "EAX takes no displacement:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
         },
-        compilerErrors.onlyLabel => {
-            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Only Label here:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
-            printErrLine(token);
-        },
         compilerErrors.wrongDataId => {
-            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Wrong data identifier:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Unidentified data type:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
         },
         compilerErrors.unidentifiedInst => {
             print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Unidentified instruction:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            printErrLine(token);
+        },
+        compilerErrors.stringCharNoDD => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "String and chars should not be DD:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            printErrLine(token);
+        },
+        compilerErrors.notWorking => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Either deprecated or not implemented:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            printErrLine(token);
+        },
+        compilerErrors.programError => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Program terminated unexpectedly:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            printErrLine(token);
+        },
+        compilerErrors.dupeLabel => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Duplicate label:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            printErrLine(token);
+        },
+        compilerErrors.fileReadError => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Error reading file.\n", .{});
+        },
+        compilerErrors.onlyASCII => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Only ASCII supported{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            printErrLine(token);
+        },
+        compilerErrors.noClosingQuote => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "No closing quote found{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
         },
     }
