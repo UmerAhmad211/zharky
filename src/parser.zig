@@ -5,6 +5,8 @@ const l = @import("lexer.zig");
 const pp = @import("pretty_print_errs.zig");
 const errorToken = pp.errorToken;
 const compilerError = pp.compilerErrors;
+const symbol = @import("symb_table.zig").Symbol;
+const symbolTable = @import("symb_table.zig").SymbolTable;
 const td = @import("token_def.zig");
 const TokenType = td.TokenType;
 const ut = @import("util.zig");
@@ -14,21 +16,22 @@ var curr_token: l.Token = undefined;
 var token_arr: ?*std.ArrayList(l.Token) = null;
 var curr_index: usize = 0;
 
-const operand = struct {
+pub const operand = struct {
     op_type: TokenType,
-    disp: ?Number,
     value: ?Number,
 };
 
-const instruction = struct {
+pub const instruction = struct {
     opcode: l.Token,
     op1: ?operand,
     op2: ?operand,
 };
 
-pub fn parse(tokenized_input: *std.ArrayList(l.Token), err_tok: *errorToken) bool {
+pub fn parse(tokenized_input: *std.ArrayList(l.Token), err_tok: *errorToken, s_table: *symbolTable, text_arr: *std.ArrayList(instruction), data_arr: *std.ArrayList(u8)) bool {
     token_arr = tokenized_input;
     curr_token = token_arr.?.*.items[curr_index];
+    var d_offset: usize = 0;
+    var t_offset: usize = 0;
 
     // errors bubbling
     expectDataSection() catch |err| {
@@ -37,7 +40,7 @@ pub fn parse(tokenized_input: *std.ArrayList(l.Token), err_tok: *errorToken) boo
         return false;
     };
 
-    expectData() catch |err| {
+    expectData(&s_table.*, &d_offset, &data_arr.*) catch |err| {
         err_tok.*.error_type = err;
         err_tok.*.err_token = curr_token;
         return false;
@@ -49,7 +52,7 @@ pub fn parse(tokenized_input: *std.ArrayList(l.Token), err_tok: *errorToken) boo
         return false;
     };
 
-    expectText() catch |err| {
+    expectText(&s_table.*, &t_offset, &text_arr.*) catch |err| {
         err_tok.*.error_type = err;
         err_tok.*.err_token = curr_token;
         return false;
@@ -84,32 +87,40 @@ fn expectTextSection() compilerError!void {
 
 // msg db "Hi", Ah\n => ok
 // msg db "hi",\n    => error
-fn expectData() compilerError!void {
+fn expectData(s_table: *symbolTable, d_offset: *usize, data_arr: *std.ArrayList(u8)) compilerError!void {
+    var d_size: u1 = undefined;
     while (curr_token.type == .IDENTIFIER) {
-        if (curr_token.type == .IDENTIFIER) nextToken() else {
+        if (curr_token.type == .IDENTIFIER) {
+            var symb: symbol = .{ .symbol_type = curr_token.type, .offset = d_offset.* };
+            s_table.*.storeSymbol(&symb, &curr_token.value) catch |err| return err;
+            nextToken();
+        } else {
             return compilerError.syntaxError;
         }
-        // zig fmt: off
-        if (curr_token.type == .DB 
-            or curr_token.type == .DD) nextToken() else {
+        if (curr_token.type == .DB) {
+            d_size = 0;
+        } else if (curr_token.type == .DD) {
+            d_size = 1;
+        } else {
             return compilerError.wrongDataId;
         }
-        // zig fmt: on
-        if (!checkForDataCommaPattern()) {
-            return compilerError.syntaxError;
-        }
+        nextToken();
+        checkForDataCommaPattern(d_size, &d_offset.*, &data_arr.*) catch |err| return err;
         nextToken();
     }
 }
 
 // check operands and syntax
-fn expectText() compilerError!void {
+fn expectText(s_table: *symbolTable, t_offset: *usize, text_arr: *std.ArrayList(instruction)) compilerError!void {
     // zig fmt: off
     while (curr_token.type != .EOF) {
         var inst_line: instruction = undefined;
         if (curr_token.type == .IDENTIFIER) {
+            var temp_token_for_symb = curr_token;
             nextToken();
             if (curr_token.type == .COLON) {
+                var temp_symb: symbol = .{.offset = t_offset.*,.symbol_type = temp_token_for_symb.type};
+                s_table.*.storeSymbol(&temp_symb, &temp_token_for_symb.value) catch |err| return err;
                 nextToken();
             } else {
                 return compilerError.syntaxError;
@@ -120,13 +131,13 @@ fn expectText() compilerError!void {
             nextToken();
         }
         else if (curr_token.type == .INSTRUCTION_1OP) {
-            inst_line = checkOperands() catch |err| return err;
+            inst_line = checkOperands(&t_offset.*) catch |err| return err;
         }
         else if (curr_token.type == .INSTRUCTION_2OP) {
-            inst_line = checkOperands() catch |err| return err;
+            inst_line = checkOperands(&t_offset.*) catch |err| return err;
         }
         else if (curr_token.type == .INSTRUCTION_O1OP) {
-            inst_line = checkOperands() catch |err| return err;
+            inst_line = checkOperands(&t_offset.*) catch |err| return err;
         }
         else {
             return compilerError.unidentifiedInst;
@@ -135,6 +146,7 @@ fn expectText() compilerError!void {
         if (curr_token.type != .EOL) {
             return compilerError.syntaxError;
         } 
+        text_arr.*.append(inst_line) catch return compilerError.programError;
         nextToken();
     }
     // zig fmt: on
@@ -158,48 +170,58 @@ fn seekToken() TokenType {
 
 // .STRING .COMMA data .EOL => ok
 // data .COMMA .EOL         => bad
-fn checkForDataCommaPattern() bool {
-    // zig fmt: off
+fn checkForDataCommaPattern(d_size: u1, d_offset: *usize, data_arr: *std.ArrayList(u8)) compilerError!void {
     while (curr_token.type != .EOL) {
-        if (curr_token.type == .STRING
-            or curr_token.type == .CHAR
-            or curr_token.type == .IMM
-            or curr_token.type == .NUM) nextToken() else {
-            return false;
+        if (curr_token.type == .STRING or curr_token.type == .CHAR) {
+            ut.createSymbol(d_size, &d_offset.*, curr_token.type, Number{ .slice = curr_token.value }) catch |err| return err;
+            if (curr_token.type == .CHAR) data_arr.*.append(curr_token.value[0]) catch return compilerError.programError else {
+                for (curr_token.value) |c|
+                    data_arr.*.append(c) catch return compilerError.programError;
+            }
+        } else if (curr_token.type == .IMM) {
+            const ch_num = ut.isANumOfAnyBase(curr_token.value, d_size) catch return compilerError.syntaxError;
+            ut.createSymbol(d_size, &d_offset.*, curr_token.type, ch_num) catch |err| return err;
+            if (ch_num == .int_u8) data_arr.*.append(ch_num.int_u8) catch return compilerError.syntaxError else {
+                data_arr.*.append(@intCast(ch_num.int_u32 & 0xFF)) catch return compilerError.syntaxError;
+                data_arr.*.append(@intCast((ch_num.int_u32 >> 8) & 0xFF)) catch return compilerError.syntaxError;
+                data_arr.*.append(@intCast((ch_num.int_u32 >> 16) & 0xFF)) catch return compilerError.syntaxError;
+                data_arr.*.append(@intCast((ch_num.int_u32 >> 24) & 0xFF)) catch return compilerError.syntaxError;
+            }
+        } else {
+            return compilerError.syntaxError;
         }
-        if(curr_token.type == .EOL) {
+        nextToken();
+        if (curr_token.type == .EOL) {
             continue;
         }
-        if(curr_token.type == .COMMA){
+        if (curr_token.type == .COMMA) {
             const seeked_token = seekToken();
-            if(seeked_token == .EOL){
-                return false;
+            if (seeked_token == .EOL) {
+                return compilerError.syntaxError;
             }
             nextToken();
-        }
-        else {
-            return false;
+        } else {
+            return compilerError.syntaxError;
         }
     }
-    // zig fmt: on
-    return true;
 }
 
-fn createMem() compilerError!operand {
+fn createMem(t_offset: *usize) compilerError!operand {
     var n_op: operand = undefined;
     n_op.op_type = .MEM;
-    var pm: u2 = 2;
+
+    t_offset.* += 1;
 
     if (curr_token.type == .IDENTIFIER) {
         n_op.value = Number{ .slice = curr_token.value };
+        t_offset.* += 4;
     } else if (curr_token.type == .IMM) {
-        n_op.disp = ut.isANumOfAnyBase(curr_token.value, .IMM) catch return compilerError.syntaxError;
+        n_op.value = ut.isANumOfAnyBase(curr_token.value, 1) catch return compilerError.syntaxError;
+        if (n_op.value.? == .int_u8) return compilerError.syntaxError;
+        t_offset.* += 4;
     } else if (curr_token.type == .REG) {
-        if (eql(u8, curr_token.value, "eax")) {
-            const seekd_token = seekToken();
-            if (seekd_token != .C_BRACKET) return compilerError.eaxNoDisp;
-        }
         n_op.value = Number{ .slice = curr_token.value };
+        t_offset.* += 1;
     } else {
         return compilerError.invalidOperand;
     }
@@ -207,54 +229,27 @@ fn createMem() compilerError!operand {
 
     if (curr_token.type == .C_BRACKET) {
         const seekd_token = seekToken();
-        if (seekd_token == .EOL) {
-            return n_op;
-        } else if (seekd_token == .COMMA) {
+        if (seekd_token == .EOL or seekd_token == .COMMA) {
             return n_op;
         } else {
             return compilerError.syntaxError;
         }
-    } else if (curr_token.type == .PLUS) {} else if (curr_token.type == .MINUS) {
-        pm = 1;
-    } else {
-        return compilerError.syntaxError;
-    }
-
-    nextToken();
-
-    if (curr_token.type == .IMM) {
-        if (pm == 0) {
-            n_op.disp = ut.isANumOfAnyBase(curr_token.value, .PLUS) catch return compilerError.syntaxError;
-        } else if (pm == 1) {
-            n_op.disp = ut.isANumOfAnyBase(curr_token.value, .MINUS) catch return compilerError.syntaxError;
-        } else {
-            n_op.disp = ut.isANumOfAnyBase(curr_token.value, .IMM) catch return compilerError.syntaxError;
-        }
-        nextToken();
-        if (curr_token.type == .C_BRACKET) {
-            const seekd_token = seekToken();
-            // .COMMA for if MEM in first operand
-            if (seekd_token == .EOL or seekd_token == .COMMA) {}
-        } else {
-            return compilerError.invalidOperand;
-        }
-    } else {
-        return compilerError.syntaxError;
     }
     return n_op;
 }
 
-fn checkOperands() compilerError!instruction {
+fn checkOperands(t_offset: *usize) compilerError!instruction {
     var n_op: operand = undefined;
     var n_inst: instruction = undefined;
     var seekd_token = seekToken();
     if (curr_token.type == .INSTRUCTION_1OP) {
+        // 1 byte inst
+        t_offset.* += 1;
         // zig fmt: off
         if(seekd_token == .REG or seekd_token == .O_BRACKET){
             if(eql(u8, curr_token.value, "mul")
             or eql(u8, curr_token.value, "div")
             or eql(u8, curr_token.value, "pop")
-            or eql(u8, curr_token.value, "push")
             or eql(u8, curr_token.value, "neg")
             or eql(u8, curr_token.value, "jmp")
             or eql(u8, curr_token.value, "call")
@@ -264,11 +259,15 @@ fn checkOperands() compilerError!instruction {
                 n_inst.opcode = curr_token;
                 nextToken();
                 if(seekd_token == .O_BRACKET){
-                    n_op = createMem() catch |err| return err;
+                    nextToken();
+                    n_op = createMem(&t_offset.*) catch |err| return err;
                 }
                 else {
                     n_op.value = Number{.slice = curr_token.value};
                     n_op.op_type = .REG;
+                    if(!(eql(u8, curr_token.value, "pop")
+                      or eql(u8, curr_token.value, "dec")
+                      or eql(u8, curr_token.value, "inc"))) t_offset.* += 1;
                 }
                 n_inst.op1 = n_op;
             }
@@ -278,7 +277,8 @@ fn checkOperands() compilerError!instruction {
             or eql(u8, curr_token.value, "push")){
                 n_inst.opcode = curr_token;
                 nextToken();
-                const convd_num =  ut.isANumOfAnyBase(curr_token.value,.IMM) catch return compilerError.syntaxError;
+                const convd_num =  ut.isANumOfAnyBase(curr_token.value,1) catch return compilerError.syntaxError;
+                t_offset.* += ut.retNumOfBytes(convd_num) catch |err| return err;
                 n_op.value = convd_num; 
                 n_op.op_type = curr_token.type;
                 n_inst.op1 = n_op;
@@ -291,26 +291,28 @@ fn checkOperands() compilerError!instruction {
             or eql(u8, curr_token.value, "call")){
                 n_inst.opcode = curr_token;
                 nextToken();
-                // should be in symb table
                 n_op.value = Number{.slice = curr_token.value};
                 n_op.op_type = .IDENTIFIER;
                 n_inst.op1 = n_op;
+                t_offset.* += 4;
             }
         }
         else {return compilerError.invalidOperand;}
     }
     else if(curr_token.type == .INSTRUCTION_2OP){
+            t_offset.* += 1;
             var n_op2: operand = undefined;
             if(eql(u8, curr_token.value, "mov")){
                 if(seekd_token == .REG or seekd_token == .O_BRACKET){
                     n_inst.opcode = curr_token;
                     nextToken();
                     if(seekd_token == .O_BRACKET){
-                        n_op = createMem() catch |err| return err;
+                        n_op = createMem(&t_offset.*) catch |err| return err;
                     }
                     else {
                         n_op.value = Number{.slice = curr_token.value};
                         n_op.op_type = .REG;
+                        t_offset.* += 1;
                     }
                     n_inst.op1 = n_op;
                 }
@@ -323,15 +325,19 @@ fn checkOperands() compilerError!instruction {
                 if(curr_token.type == .O_BRACKET){
                     nextToken();
                     if(n_inst.op1.?.op_type == .MEM) {return compilerError.invalidOperand;}
-                    else {n_op2 = createMem() catch |err| return err;}
+                    n_op2 = createMem(&t_offset.*) catch |err| return err;
                 }
                 else {
                     n_op2.op_type = curr_token.type;
                     if(curr_token.type == .REG or curr_token.type == .IDENTIFIER)
-                        n_op2.value = Number{.slice = curr_token.value} else {
-                        n_op2.value = ut.isANumOfAnyBase(curr_token.value,.IMM) catch return compilerError.syntaxError;
+                        n_op2.value = Number{.slice = curr_token.value} else { // IMM
+                        n_op2.value = ut.isANumOfAnyBase(curr_token.value,1) catch return compilerError.syntaxError;
+                    }
+                    if(curr_token.type == .IMM or curr_token.type == .IDENTIFIER) t_offset.* += 4 else {
+                        t_offset.* += 1;
                     }
                 }
+                if(n_op2.value.? == .int_u8) return compilerError.syntaxError;
                 n_inst.op2 = n_op2;
             }
             else {return compilerError.invalidOperand;}
@@ -349,11 +355,12 @@ fn checkOperands() compilerError!instruction {
                 nextToken();
                 if(seekd_token == .O_BRACKET){
                     nextToken();
-                    n_op = createMem() catch |err| return err;
+                    n_op = createMem(&t_offset.* ) catch |err| return err;
                 }
                 else {
                     n_op.value = Number{.slice = curr_token.value};
                     n_op.op_type = .REG;
+                    t_offset.* += 1;
                 }
             }
             nextToken();
@@ -363,21 +370,30 @@ fn checkOperands() compilerError!instruction {
             if(seekd_token == .REG or seekd_token == .IMM){
                 nextToken();
                 n_op2.op_type = curr_token.type;
-                if(curr_token.type == .REG)
-                    n_op2.value = Number{.slice = curr_token.value} else {
-                    n_op2.value = ut.isANumOfAnyBase(curr_token.value,.IMM) catch return compilerError.syntaxError; 
+                if(curr_token.type == .REG){
+                    n_op2.value = Number{.slice = curr_token.value};
+                    t_offset.* += 1;
+                } else {
+                    n_op2.value = ut.isANumOfAnyBase(curr_token.value,1) catch return compilerError.syntaxError; 
+                    t_offset.* += 1;
                 }
             }
             else {return compilerError.syntaxError;}
         }
     }
     else if(curr_token.type == .INSTRUCTION_O1OP){
+        t_offset.* += 1;
         n_inst.opcode = curr_token;
         if(seekd_token == .IMM){
             nextToken();
             n_op.op_type = seekd_token;
-            const convd_num = ut.isANumOfAnyBase(curr_token.value,.IMM) catch return compilerError.syntaxError;
-            n_op.value = convd_num;
+            const convd_num = ut.isANumOfAnyBase(curr_token.value,1) catch return compilerError.syntaxError;
+            if (convd_num.int_u32 >= std.math.minInt(u16) and convd_num.int_u32 <= std.math.maxInt(u16)) {
+                    const conv_num_u16: u16 = @intCast(convd_num.int_u32);
+                    n_op.value = Number{.int_u16 = conv_num_u16};
+                    t_offset.* += 2;
+            }
+            else {return compilerError.syntaxError;}
             n_inst.op1 = n_op;
         }
         else if(seekd_token == .EOL) {}
