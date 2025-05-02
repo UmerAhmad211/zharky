@@ -3,8 +3,10 @@ const eql = std.mem.eql;
 
 pub const td = @import("token_def.zig");
 const ut = @import("util.zig");
+const compilerError = @import("pretty_print_errs.zig").compilerErrors;
 const red = @import("pretty_print_errs.zig").red;
 const reset = @import("pretty_print_errs.zig").reset;
+const errorToken = @import("pretty_print_errs.zig").errorToken;
 
 // zig fmt: off
 pub const Token = struct {
@@ -16,31 +18,37 @@ pub const Token = struct {
 };
 // zig fmt: on
 
-pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Token), line_no: *usize) !void {
+pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Token), line_no: usize, err_tok: *errorToken) bool {
     var i: usize = 0;
+    var err_occur: bool = false;
+    var tok_ap: Token = undefined;
 
     while (i < line.len) : (i += 1) {
         switch (line[i]) {
-            ',' => try tokenized_input.append(.{ .type = td.TokenType.COMMA, .value = ",", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
-            '[' => try tokenized_input.append(.{ .type = td.TokenType.O_BRACKET, .value = "[", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
-            ']' => try tokenized_input.append(.{ .type = td.TokenType.C_BRACKET, .value = "]", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
-            ':' => try tokenized_input.append(.{ .type = td.TokenType.COLON, .value = ":", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
-            '+' => try tokenized_input.append(.{ .type = td.TokenType.PLUS, .value = "+", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
-            '-' => try tokenized_input.append(.{ .type = td.TokenType.MINUS, .value = "-", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 }),
-            ' ' => {}, //skip whitesapces
+            ',' => tok_ap = .{ .type = td.TokenType.COMMA, .value = ",", .curr_line = line, .row_no = line_no, .col_no = i + 1 },
+            '[' => tok_ap = .{ .type = td.TokenType.O_BRACKET, .value = "[", .curr_line = line, .row_no = line_no, .col_no = i + 1 },
+            ']' => tok_ap = .{ .type = td.TokenType.C_BRACKET, .value = "]", .curr_line = line, .row_no = line_no, .col_no = i + 1 },
+            ':' => tok_ap = .{ .type = td.TokenType.COLON, .value = ":", .curr_line = line, .row_no = line_no, .col_no = i + 1 },
+            ' ' => {
+                continue;
+            }, //skip whitesapces
+            '\n' => {
+                continue;
+            },
             '\'' => {
                 // 'A','2'
                 if ((i + 2 < line.len) and line[i + 2] == '\'') {
-                    if (std.ascii.isDigit(line[i + 1])) {
-                        try tokenized_input.append(.{ .type = td.TokenType.NUM, .value = line[i + 1 .. i + 2], .curr_line = line, .row_no = line_no.*, .col_no = i + 1 });
-                    } else if (std.ascii.isASCII(line[i + 1])) {
-                        try tokenized_input.append(.{ .type = td.TokenType.CHAR, .value = line[i + 1 .. i + 2], .curr_line = line, .row_no = line_no.*, .col_no = i + 1 });
+                    if (std.ascii.isASCII(line[i + 1])) {
+                        tok_ap = .{ .type = td.TokenType.CHAR, .value = line[i + 1 .. i + 2], .curr_line = line, .row_no = line_no, .col_no = i + 1 };
+                    } else {
+                        err_tok.*.error_type = compilerError.onlyASCII;
+                        err_occur = true;
                     }
                     i += 2;
                 } else {
                     // not finding closing single quote
-                    std.debug.print("ZHARKY:" ++ red ++ " Error:" ++ reset ++ " Unexpected token:{d}:{d}\n", .{ line_no.*, i + 1 });
-                    std.process.exit(1);
+                    err_tok.*.error_type = compilerError.noClosingQuote;
+                    err_occur = true;
                 }
             },
             '\"' => {
@@ -55,12 +63,12 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                     inner_index += 1;
                 }
                 if (inner_index < line.len and enc_end_quote) {
-                    try tokenized_input.append(.{ .type = td.TokenType.STRING, .value = line[i + 1 .. inner_index], .curr_line = line, .row_no = line_no.*, .col_no = i + 1 });
+                    tok_ap = .{ .type = td.TokenType.STRING, .value = line[i + 1 .. inner_index], .curr_line = line, .row_no = line_no, .col_no = i + 1 };
                     i = inner_index;
                 } else {
                     // not finding closing double quote
-                    std.debug.print("ZHARKY:" ++ red ++ " Error:" ++ reset ++ " Unexpected token:{d}:{d}\n", .{ line_no.*, i + 1 });
-                    std.process.exit(1);
+                    err_tok.*.error_type = compilerError.noClosingQuote;
+                    err_occur = true;
                 }
             },
             else => {
@@ -75,14 +83,12 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                 }
 
                 // check on tokens
-                const conv_if_num = ut.isANumOfAnyBase(line[i..inner_index], .IMM);
+                const conv_if_num = ut.isANumOfAnyBase(line[i..inner_index], 0);
 
                 // zig fmt: off
                 var token_type: td.TokenType = undefined;
-                if (conv_if_num != ut.NumError.NumConv
-                    and conv_if_num != ut.NumError.InvalidNumBase
-                    and conv_if_num != ut.NumError.DefaultError) token_type = td.TokenType.IMM
 
+                if(conv_if_num != compilerError.programError) token_type = .IMM 
                 else if (eql(u8,line[i..inner_index],td.k_global)) token_type = td.TokenType.K_GLOBAL
                 else if (eql(u8,line[i..inner_index],td.k_section)) token_type = td.TokenType.K_SECTION
                 else if (eql(u8,line[i..inner_index],td.t_section)) token_type = td.TokenType.T_SECTION
@@ -99,11 +105,23 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                 else token_type = td.TokenType.IDENTIFIER;
                 // zig fmt: on
 
-                try tokenized_input.append(.{ .type = token_type, .value = line[i..inner_index], .curr_line = line, .row_no = line_no.*, .col_no = i + 1 });
+                tok_ap = .{ .type = token_type, .value = line[i..inner_index], .curr_line = line, .row_no = line_no, .col_no = i + 1 };
                 i = inner_index - 1;
             },
         }
+        if (err_occur) {
+            err_tok.*.err_token = tok_ap;
+            return false;
+        }
+        tokenized_input.append(tok_ap) catch {
+            err_tok.*.err_token = tok_ap;
+            return false;
+        };
     }
     // EOL to separate each instruction
-    try tokenized_input.append(.{ .type = td.TokenType.EOL, .value = "\n", .curr_line = line, .row_no = line_no.*, .col_no = i + 1 });
+    tokenized_input.append(.{ .type = td.TokenType.EOL, .value = "\n", .curr_line = line, .row_no = line_no, .col_no = i + 1 }) catch {
+        err_tok.*.err_token = tok_ap;
+        return false;
+    };
+    return true;
 }
