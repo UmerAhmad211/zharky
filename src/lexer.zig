@@ -8,15 +8,13 @@ const red = @import("pretty_print_errs.zig").red;
 const reset = @import("pretty_print_errs.zig").reset;
 const errorToken = @import("pretty_print_errs.zig").errorToken;
 
-// zig fmt: off
 pub const Token = struct {
     type: td.TokenType,
     value: []const u8,
     curr_line: []const u8,
     row_no: usize,
-    col_no: usize
+    col_no: usize,
 };
-// zig fmt: on
 
 pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Token), line_no: usize, err_tok: *errorToken) bool {
     var i: usize = 0;
