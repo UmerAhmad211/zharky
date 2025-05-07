@@ -16,6 +16,7 @@ const TokenType = td.TokenType;
 const ut = @import("util.zig");
 const Number = ut.Number;
 const Line = ut.Line;
+const cg = @import("codegen.zig");
 
 pub fn process(file_name: []const u8) !void {
     // allocator
@@ -57,14 +58,23 @@ pub fn process(file_name: []const u8) !void {
         pp.printErrMsgAndExit(&err_tok);
     };
 
+    // hold text
     var text_arr = std.ArrayList(instruction).init(allocator);
     defer text_arr.deinit();
 
+    // hold data
     var data_arr = std.ArrayList(u8).init(allocator);
     defer data_arr.deinit();
 
+    // stores header meta data
+    var header = std.ArrayList(u8).init(allocator);
+    defer header.deinit();
+
+    var data_len: u32 = 0;
+    var text_len: u32 = 0;
+
     // parser
-    if (!p.parse(&tokenized_input, &err_tok, &s_table, &text_arr, &data_arr))
+    if (!p.parse(&tokenized_input, &err_tok, &s_table, &text_arr, &data_arr, &data_len, &text_len))
         pp.printErrMsgAndExit(&err_tok);
 
     // hold encodings
@@ -73,8 +83,31 @@ pub fn process(file_name: []const u8) !void {
 
     // set target headers
     if (std.mem.eql(u8, ut.out_file_type, "-elf32")) {
-        try tg_elf.tgELF32(&encodings);
+        try tg_elf.tgELF32(&header);
     } else if (std.mem.eql(u8, ut.out_file_type, "-pe32")) {
-        tg_win.tgWIN32(&encodings);
+        tg_win.tgWIN32(&header);
     }
+
+    // calculate pad
+    const pad_1 = [_]u8{0} ** 0x0F8C;
+    const pad_2_len: u32 = @abs(0x1000 - text_len);
+
+    std.debug.print("TEXT LEN: {} \n", .{text_len});
+
+    try cg.codegenDriver(&encodings, &text_arr, &s_table, &header, 0x1000 + text_len + pad_2_len);
+
+    const old_len = encodings.items.len;
+    try encodings.resize(old_len + pad_2_len);
+    @memset(encodings.items[old_len..], 0x00);
+
+    tg_elf.updateELF(&header, text_len, data_len, 0x1000 + text_len + pad_2_len);
+
+    // file
+    const file = try std.fs.cwd().createFile(ut.out_file_name, .{ .truncate = true });
+    defer file.close();
+
+    _ = try file.writeAll(header.items);
+    _ = try file.writeAll(&pad_1);
+    _ = try file.writeAll(encodings.items);
+    _ = try file.writeAll(data_arr.items);
 }
