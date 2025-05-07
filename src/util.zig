@@ -6,7 +6,6 @@ const s = @import("symb_table.zig");
 const symbol = s.Symbol;
 const td = @import("token_def.zig");
 
-pub const AsmError = error{InvalidRegister};
 pub var out_file_name: []const u8 = undefined;
 pub var out_file_type: []const u8 = undefined;
 
@@ -98,9 +97,9 @@ pub fn readFileStoreAndTrim(lines: *std.MultiArrayList(Line), allocator: *const 
     }
 }
 
-pub fn retRegValues(reg: []const u8) AsmError!u8 {
-    // returns registers values or error
-    if (std.ascii.eqlIgnoreCase(reg, "ax")) {
+pub fn retRegValues(reg: []const u8) u8 {
+    // returns registers values
+    if (std.ascii.eqlIgnoreCase(reg, "eax")) {
         return 0;
     } else if (std.ascii.eqlIgnoreCase(reg, "ecx")) {
         return 1;
@@ -116,12 +115,12 @@ pub fn retRegValues(reg: []const u8) AsmError!u8 {
         return 6;
     } else if (std.ascii.eqlIgnoreCase(reg, "edi")) {
         return 7;
-    } else return AsmError.InvalidRegister;
+    }
+    return 8;
 }
 
 // max 32 bit number
 pub fn isANumOfAnyBase(num: []const u8, allow_u8: u1) compilerError!Number {
-    // MINUS and PLUS are symbols i.e: +32 -> PLUS and -32 -> MINUS
     // postfix check
     // d = decimal, h = hexa, o = octal, b = binary
     var base: u8 = undefined;
@@ -145,9 +144,13 @@ pub fn isANumOfAnyBase(num: []const u8, allow_u8: u1) compilerError!Number {
 
     // convert or return err
     conv_num = Number{ .int_u32 = std.fmt.parseInt(u32, conv_str, base) catch return compilerError.programError };
-    if ((allow_u8 == 0) and conv_num.int_u32 >= std.math.minInt(u8) and conv_num.int_u32 <= std.math.maxInt(u8)) {
-        const conv_num_i8: u8 = @intCast(conv_num.int_u32);
-        return Number{ .int_u8 = conv_num_i8 };
+    if (allow_u8 == 0) {
+        if (conv_num.int_u32 >= std.math.minInt(u8) and conv_num.int_u32 <= std.math.maxInt(u8)) {
+            const conv_num_i8: u8 = @intCast(conv_num.int_u32);
+            return Number{ .int_u8 = conv_num_i8 };
+        } else {
+            return compilerError.syntaxError;
+        }
     }
     return conv_num;
 }
@@ -209,7 +212,7 @@ pub inline fn containsChar(haystack: []const u8, needle: u8) bool {
     return false;
 }
 
-pub fn createSymbol(d_size: usize, offset: *usize, t_type: td.TokenType, d_value: Number) compilerError!void {
+pub fn createSymbol(d_size: usize, offset: *u32, t_type: td.TokenType, d_value: Number) compilerError!void {
     switch (t_type) {
         .CHAR => {
             if (d_size == 0) offset.* += 1 else {
@@ -218,13 +221,13 @@ pub fn createSymbol(d_size: usize, offset: *usize, t_type: td.TokenType, d_value
         },
         .STRING => {
             if (d_size == 0)
-                offset.* = d_value.slice.len
+                offset.* = @intCast(d_value.slice.len)
             else {
                 return compilerError.stringCharNoDD;
             }
         },
         .IMM => {
-            if (d_size == 0 and d_value == .int_u8) offset.* += 1 else if (d_size == 1 and d_value == .int_u32) offset.* += 1 else {
+            if (d_size == 0 and d_value == .int_u8) offset.* += 1 else if (d_size == 1 and d_value == .int_u32) offset.* += 4 else {
                 return compilerError.syntaxError;
             }
         },
@@ -232,7 +235,7 @@ pub fn createSymbol(d_size: usize, offset: *usize, t_type: td.TokenType, d_value
     }
 }
 
-pub fn retNumOfBytes(num: Number) compilerError!usize {
+pub fn retNumOfBytes(num: Number) compilerError!u32 {
     switch (num) {
         numberType.int_u32 => return 4,
         numberType.int_u8 => return 1,
@@ -241,4 +244,11 @@ pub fn retNumOfBytes(num: Number) compilerError!usize {
             return compilerError.invalidOperand;
         },
     }
+}
+
+pub fn append32BitLittleEndian(buffer: *std.ArrayList(u8), num: u32) !void {
+    try buffer.*.append(@intCast(num & 0xFF));
+    try buffer.*.append(@intCast((num >> 8) & 0xFF));
+    try buffer.*.append(@intCast((num >> 16) & 0xFF));
+    try buffer.*.append(@intCast((num >> 24) & 0xFF));
 }
