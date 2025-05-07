@@ -5,7 +5,7 @@ const TokenType = @import("token_def.zig").TokenType;
 
 pub const Symbol = struct {
     symbol_type: TokenType,
-    offset: usize,
+    offset: u32,
 };
 
 pub const SymbolTable = struct {
@@ -20,6 +20,18 @@ pub const SymbolTable = struct {
             self.*.table.put(name.*, symbol.*) catch return compilerError.programError
         else
             return compilerError.dupeLabel;
+    }
+
+    pub fn containsLabel(self: *SymbolTable, name: *const []const u8) bool {
+        if (self.*.table.contains(name.*))
+            return true;
+        return false;
+    }
+
+    pub fn getOffset(self: *SymbolTable, name: []const u8) compilerError!Symbol {
+        if (self.*.table.get(name)) |offset| return offset else {
+            return compilerError.labelNotFound;
+        }
     }
 
     pub fn deinit(self: *SymbolTable) void {
