@@ -90,11 +90,10 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
 
                 if(conv_if_num != compilerError.programError) token_type = .IMM 
                 else if (eql(u8,line[i..inner_index],td.k_global)) token_type = td.TokenType.K_GLOBAL
+                else if (eql(u8,line[i..inner_index],td.start)) token_type = td.TokenType.START
                 else if (eql(u8,line[i..inner_index],td.k_section)) token_type = td.TokenType.K_SECTION
                 else if (eql(u8,line[i..inner_index],td.t_section)) token_type = td.TokenType.T_SECTION
                 else if (eql(u8,line[i..inner_index],td.d_section)) token_type = td.TokenType.D_SECTION
-                else if (eql(u8,line[i..inner_index],td.word)) token_type = td.TokenType.WORD
-                else if (eql(u8,line[i..inner_index],td.dword)) token_type = td.TokenType.DWORD
                 else if (eql(u8,line[i..inner_index],td.db)) token_type = td.TokenType.DB
                 else if (eql(u8,line[i..inner_index],td.dd)) token_type = td.TokenType.DD
                 else if (ut.containsStr(td.instructions_0op, line[i..inner_index])) token_type = td.TokenType.INSTRUCTION_0OP
