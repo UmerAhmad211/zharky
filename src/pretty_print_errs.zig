@@ -16,6 +16,8 @@ pub const compilerErrors = error{
     fileReadError,
     onlyASCII,
     noClosingQuote,
+    startNotFound,
+    labelNotFound,
 };
 
 pub const errorToken = struct {
@@ -70,11 +72,18 @@ pub fn printErrMsgAndExit(token: *errorToken) void {
             print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Error reading file.\n", .{});
         },
         compilerErrors.onlyASCII => {
-            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Only ASCII supported{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Only ASCII supported:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
         },
         compilerErrors.noClosingQuote => {
-            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "No closing quote found{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "No closing quote found:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
+            printErrLine(token);
+        },
+        compilerErrors.startNotFound => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Symbol _start not found.\n", .{});
+        },
+        compilerErrors.labelNotFound => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Label not found:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
         },
     }
