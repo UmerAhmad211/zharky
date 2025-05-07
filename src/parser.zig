@@ -18,13 +18,14 @@ var curr_index: usize = 0;
 
 pub const operand = struct {
     op_type: TokenType,
-    value: ?Number,
+    value: Number,
 };
 
 pub const instruction = struct {
     opcode: l.Token,
     op1: ?operand,
     op2: ?operand,
+    offset: u32,
 };
 
 pub fn parse(tokenized_input: *std.ArrayList(l.Token), err_tok: *errorToken, s_table: *symbolTable, text_arr: *std.ArrayList(instruction), data_arr: *std.ArrayList(u8), data_len: *u32, text_len: *u32) bool {
@@ -116,7 +117,7 @@ fn expectData(s_table: *symbolTable, d_offset: *u32, data_arr: *std.ArrayList(u8
 fn expectText(s_table: *symbolTable, t_offset: *u32, text_arr: *std.ArrayList(instruction)) compilerError!void {
     // zig fmt: off
     while (curr_token.type != .EOF) {
-        var inst_line: instruction = .{.opcode = undefined, .op1 = null,.op2 = null};
+        var inst_line: instruction = .{.opcode = undefined, .op1 = null,.op2 = null, .offset = 0};
         if (curr_token.type == .IDENTIFIER or curr_token.type == .START) {
             var temp_token_for_symb = curr_token;
             nextToken();
@@ -130,8 +131,9 @@ fn expectText(s_table: *symbolTable, t_offset: *u32, text_arr: *std.ArrayList(in
         }
         else if (curr_token.type == .INSTRUCTION_0OP) {
             inst_line.opcode = curr_token;
-            text_arr.*.append(inst_line) catch return compilerError.programError;
+            inst_line.offset = t_offset.*;
             t_offset.* += 1;
+            text_arr.*.append(inst_line) catch return compilerError.programError;
             nextToken();
         }
         else if (curr_token.type == .INSTRUCTION_1OP) {
@@ -243,7 +245,7 @@ fn createMem(t_offset: *u32) compilerError!operand {
 
 fn checkOperands(t_offset: *u32) compilerError!instruction {
     var n_op: operand = undefined;
-    var n_inst: instruction = .{ .opcode = undefined, .op1 = null, .op2 = null };
+    var n_inst: instruction = .{ .opcode = undefined, .op1 = null, .op2 = null, .offset = t_offset.* };
     var seekd_token = seekToken();
     if (curr_token.type == .INSTRUCTION_1OP) {
         // 1 byte inst
@@ -345,7 +347,7 @@ fn checkOperands(t_offset: *u32) compilerError!instruction {
                     if(curr_token.type == .IMM or curr_token.type == .IDENTIFIER) t_offset.* += 4;
                     
                 }
-                if(n_op2.value.? == .int_u8) return compilerError.syntaxError;
+                if(n_op2.value == .int_u8) return compilerError.syntaxError;
                 n_inst.op2 = n_op2;
             }
             else {return compilerError.invalidOperand;}
@@ -383,7 +385,7 @@ fn checkOperands(t_offset: *u32) compilerError!instruction {
                     n_op2.value = Number{.slice = curr_token.value};
                 } else {
                     n_op2.value = ut.isANumOfAnyBase(curr_token.value,1) catch return compilerError.syntaxError; 
-                    t_offset.* += ut.retNumOfBytes(n_op2.value.?) catch |err| return err;
+                    t_offset.* += ut.retNumOfBytes(n_op2.value) catch |err| return err;
                 }
                 n_inst.op2 = n_op2;
             }
