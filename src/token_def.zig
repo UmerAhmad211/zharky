@@ -1,6 +1,7 @@
 pub const TokenType = enum {
     // multiple chars
     K_GLOBAL,
+    START,
     K_SECTION,
     T_SECTION,
     D_SECTION,
@@ -8,8 +9,6 @@ pub const TokenType = enum {
     INSTRUCTION_1OP,
     INSTRUCTION_2OP,
     INSTRUCTION_O1OP,
-    WORD,
-    DWORD,
     DB,
     DD,
     REG,
@@ -34,6 +33,7 @@ pub const TokenType = enum {
 
 pub const k_global = "global";
 pub const k_section = "section";
+pub const start = "_start";
 
 pub const t_section = ".text";
 pub const d_section = ".data";
