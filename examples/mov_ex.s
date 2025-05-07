@@ -10,5 +10,5 @@ _start:
     nop             
     mov ecx, 4c00h     
     mov eax, 1         
-    xor ebx, ebx      
+    mov ebx, 0      
     int 80h          
