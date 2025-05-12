@@ -155,7 +155,7 @@ pub fn isANumOfAnyBase(num: []const u8, allow_u8: u1) compilerError!Number {
     return conv_num;
 }
 
-pub fn printHelp() !void {
+pub fn printHelp() compilerError!void {
     const zhky_usage =
         \\zhky <file_name> -o <out_file_name> -<out_file_type>
         \\Example:
@@ -166,24 +166,20 @@ pub fn printHelp() !void {
 
     // dont make this global, wont compile for windows
     const stdout = std.io.getStdOut().writer();
-    try stdout.print("{s}\n", .{zhky_usage});
+    stdout.print("{s}\n", .{zhky_usage}) catch return compilerError.stdoutFail;
 }
 
-pub fn assemblerDriver(args: [][:0]u8) !void {
+pub fn assemblerDriver(args: [][:0]u8) compilerError!void {
     // only help with 2 args len
     if (args.len == 2) {
         if (std.mem.eql(u8, args[1], "help")) {
-            try printHelp();
-            std.process.exit(0);
+            printHelp() catch |err| return err;
         }
-        std.debug.print("ZHARKY: Wrong arguments.Type zhky help to get more info.\n", .{});
-        std.process.exit(1);
+        return compilerError.wrongArgs;
     } else if (args.len != 5) {
-        std.debug.print("ZHARKY: Wrong arguments.Type zhky help to get more info.\n", .{});
-        std.process.exit(1);
+        return compilerError.wrongArgs;
     } else if (!validFileExtension(args[1])) {
-        std.debug.print("ZHARKY: Wrong arguments.Type zhky help to get more info.\n", .{});
-        std.process.exit(1);
+        return compilerError.wrongArgs;
     }
 
     // only available targets
@@ -191,8 +187,7 @@ pub fn assemblerDriver(args: [][:0]u8) !void {
         std.mem.eql(u8, args[4], "-elf32") or
         std.mem.eql(u8, args[4], "-dos")))
     {
-        std.debug.print("ZHARKY: No such target exists. Use -elf32, -pe32 or -dos.", .{});
-        std.process.exit(1);
+        return compilerError.wrongArgs;
     }
     out_file_type = args[4];
     out_file_name = args[3];
