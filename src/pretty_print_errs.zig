@@ -18,6 +18,9 @@ pub const compilerErrors = error{
     noClosingQuote,
     startNotFound,
     labelNotFound,
+    wrongArgs,
+    stdoutFail,
+    writeCreateFileErr,
 };
 
 pub const errorToken = struct {
@@ -61,8 +64,7 @@ pub fn printErrMsgAndExit(token: *errorToken) void {
             printErrLine(token);
         },
         compilerErrors.programError => {
-            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Program terminated unexpectedly:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
-            printErrLine(token);
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Program terminated unexpectedly.\n", .{});
         },
         compilerErrors.dupeLabel => {
             print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Duplicate label:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
@@ -85,6 +87,15 @@ pub fn printErrMsgAndExit(token: *errorToken) void {
         compilerErrors.labelNotFound => {
             print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Label not found:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
+        },
+        compilerErrors.wrongArgs => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Wrong arguments.\n", .{});
+        },
+        compilerErrors.stdoutFail => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "stdout fail.\n", .{});
+        },
+        compilerErrors.writeCreateFileErr => {
+            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "File create/write error.\n", .{});
         },
     }
     std.process.exit(1);
