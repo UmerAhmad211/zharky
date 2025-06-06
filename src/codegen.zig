@@ -10,10 +10,12 @@ const symbolTable = @import("symb_table.zig").SymbolTable;
 const ut = @import("util.zig");
 const numberType = ut.numberType;
 const symbol = @import("symb_table.zig").Symbol;
+const Number = ut.Number;
 
 const text_hdr_addr: u32 = 0x08048000;
 var data_hdr_addr: u32 = 0;
 
+// codegen driver
 pub fn codegenDriver(encodings: *std.ArrayList(u8), text_arr: *std.ArrayList(instruction), s_table: *symbolTable, header: *std.ArrayList(u8), data_offset: u32) compilerError!void {
     const start: []const u8 = "_start";
     var retd_offset: symbol = undefined;
@@ -65,42 +67,25 @@ fn encodeInst1OP(encodings: *std.ArrayList(u8), inst: *const instruction, s_tabl
 
 fn encode2OP(encodings: *std.ArrayList(u8), inst: *const instruction, s_table: *symbolTable) compilerError!void {
     if (eql(u8, inst.*.opcode.value, "mov")) {
-        if (inst.*.op1.?.op_type == .REG and inst.*.op2.?.op_type == .REG) {
+        if (inst.*.op1.?.op_type == .REG and (inst.*.op2.?.op_type == .REG or inst.*.op2.?.op_type == .MEM)) {
+            const op2_type = inst.*.op2.?.op_type;
             encodings.*.append(0x8B) catch return compilerError.programError;
-            const mod: u8 = 3 << 6;
+            var mod: u8 = undefined;
+            var rm: u8 = undefined;
+            if (op2_type == .REG) {
+                mod = 3 << 6;
+                rm = ut.retRegValues(inst.*.op2.?.value.slice);
+            } else {
+                mod = 0 << 6;
+                rm = 0x5;
+            }
             const reg: u8 = ut.retRegValues(inst.*.op1.?.value.slice) << 3;
-            const rm = ut.retRegValues(inst.*.op2.?.value.slice);
             const modrm: u8 = mod | reg | rm;
             encodings.*.append(modrm) catch return compilerError.programError;
+            if (op2_type == .MEM) appendIdOrImm(&encodings.*, inst.*.op2.?.value, &s_table.*);
         } else if (inst.*.op1.?.op_type == .REG and (inst.*.op2.?.op_type == .IMM or inst.*.op2.?.op_type == .IDENTIFIER)) {
             encodings.*.append(0xB8 + ut.retRegValues(inst.*.op1.?.value.slice)) catch return compilerError.programError;
-            if (inst.*.op2.?.op_type == .IMM)
-                ut.append32BitLittleEndian(&encodings.*, inst.*.op2.?.value.int_u32) catch return compilerError.programError
-            else {
-                var label_offset: u32 = 0;
-                const retd_offset = s_table.*.getOffset(inst.*.op2.?.value.slice) catch |err| return err;
-                if (retd_offset.symbol_type == .D_SECTION) label_offset = data_hdr_addr + retd_offset.offset else {
-                    label_offset = text_hdr_addr + retd_offset.offset + 0x1000;
-                }
-                ut.append32BitLittleEndian(&encodings.*, label_offset) catch return compilerError.programError;
-            }
-        } else if (inst.*.op1.?.op_type == .REG and inst.*.op2.?.op_type == .MEM) {
-            const mod: u8 = 0 << 6;
-            const reg: u8 = ut.retRegValues(inst.*.op1.?.value.slice) << 3;
-            const rm: u8 = 0x5;
-            const modrm = mod | reg | rm;
-            encodings.*.append(0x8B) catch return compilerError.programError;
-            encodings.*.append(modrm) catch return compilerError.programError;
-            if (inst.*.op2.?.value == .int_u32) {
-                ut.append32BitLittleEndian(&encodings.*, inst.*.op2.?.value.int_u32) catch return compilerError.programError;
-            } else if (inst.*.op2.?.value == .slice) {
-                const retd_offset = s_table.*.getOffset(inst.*.op2.?.value.slice) catch |err| return err;
-                var label_offset: u32 = 0;
-                if (retd_offset.symbol_type == .D_SECTION) label_offset = data_hdr_addr + retd_offset.offset else {
-                    label_offset = text_hdr_addr + retd_offset.offset + 0x1000;
-                }
-                ut.append32BitLittleEndian(&encodings.*, label_offset) catch return compilerError.programError;
-            }
+            appendIdOrImm(&encodings.*, inst.*.op2.?.value, &s_table.*);
         }
     }
 }
@@ -112,5 +97,16 @@ fn encodeInstO1OP(encodings: *std.ArrayList(u8), inst: *const instruction) !void
         try encodings.*.append(@intCast((op.value.int_u16 >> 8) & 0xFF));
     } else {
         try encodings.*.append(0xC3);
+    }
+}
+
+fn appendIdOrImm(encodings: *std.ArrayList(u8), value: Number, s_table: *symbolTable) compilerError!void {
+    if (value.int_u32) ut.append32BitLittleEndian(&encodings.*, value.int_u32) else {
+        var label_offset: u32 = 0;
+        const retd_offset = s_table.*.getOffset(value.slice) catch |err| return err;
+        if (retd_offset.symbol_type == .D_SECTION) label_offset = data_hdr_addr + retd_offset.offset else {
+            label_offset = text_hdr_addr + retd_offset.offset + 0x1000;
+        }
+        ut.append32BitLittleEndian(&encodings.*, label_offset) catch return compilerError.programError;
     }
 }
