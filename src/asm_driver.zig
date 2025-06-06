@@ -77,14 +77,6 @@ pub fn process(file_name: []const u8) compilerError!void {
     if (!p.parse(&tokenized_input, &err_tok, &s_table, &text_arr, &data_arr, &data_len, &text_len))
         pp.printErrMsgAndExit(&err_tok);
 
-    // debug
-    for (text_arr.items) |t| {
-        std.debug.print("{s} ", .{t.opcode.value});
-        if (t.op1 != null) std.debug.print("{s} ", .{@tagName(t.op1.?.op_type)});
-        if (t.op2 != null) std.debug.print("{s} ", .{@tagName(t.op2.?.op_type)});
-        std.debug.print("{}\n", .{t.offset});
-    }
-
     // hold encodings
     var encodings = std.ArrayList(u8).init(allocator);
     defer encodings.deinit();
