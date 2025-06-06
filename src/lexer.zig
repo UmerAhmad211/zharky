@@ -29,12 +29,11 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
             ':' => tok_ap = .{ .type = td.TokenType.COLON, .value = ":", .curr_line = line, .row_no = line_no, .col_no = i + 1 },
             ' ' => {
                 continue;
-            }, //skip whitesapces
+            },
             '\n' => {
                 continue;
             },
             '\'' => {
-                // 'A','2'
                 if ((i + 2 < line.len) and line[i + 2] == '\'') {
                     if (std.ascii.isASCII(line[i + 1])) {
                         tok_ap = .{ .type = td.TokenType.CHAR, .value = line[i + 1 .. i + 2], .curr_line = line, .row_no = line_no, .col_no = i + 1 };
@@ -44,7 +43,6 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                     }
                     i += 2;
                 } else {
-                    // not finding closing single quote
                     err_tok.*.error_type = compilerError.noClosingQuote;
                     err_occur = true;
                 }
@@ -52,7 +50,6 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
             '\"' => {
                 var enc_end_quote: bool = false;
                 var inner_index: usize = i + 1;
-                // read string
                 while (inner_index < line.len) {
                     if (line[inner_index] == '\"') {
                         enc_end_quote = true;
@@ -64,13 +61,11 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                     tok_ap = .{ .type = td.TokenType.STRING, .value = line[i + 1 .. inner_index], .curr_line = line, .row_no = line_no, .col_no = i + 1 };
                     i = inner_index;
                 } else {
-                    // not finding closing double quote
                     err_tok.*.error_type = compilerError.noClosingQuote;
                     err_occur = true;
                 }
             },
             else => {
-                // read till a delimiter
                 var inner_index: usize = i;
                 while (inner_index < line.len) {
                     if (!ut.containsChar(&td.single_char, line[inner_index])) {
@@ -81,7 +76,7 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
                 }
 
                 // check on tokens
-                const conv_if_num = ut.isANumOfAnyBase(line[i..inner_index], 0);
+                const conv_if_num = ut.isANumOfAnyBase(line[i..inner_index], true);
 
                 // zig fmt: off
                 var token_type: td.TokenType = undefined;
@@ -115,7 +110,6 @@ pub fn tokenizeInputStream(line: []const u8, tokenized_input: *std.ArrayList(Tok
             return false;
         };
     }
-    // EOL to separate each instruction
     tokenized_input.append(.{ .type = td.TokenType.EOL, .value = "\n", .curr_line = line, .row_no = line_no, .col_no = i + 1 }) catch {
         err_tok.*.err_token = tok_ap;
         return false;
