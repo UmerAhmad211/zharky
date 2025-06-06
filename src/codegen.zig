@@ -5,7 +5,6 @@ const compilerError = @import("pretty_print_errs.zig").compilerErrors;
 const l = @import("lexer.zig");
 const p = @import("parser.zig");
 const instruction = p.instruction;
-const pl = @import("plt.zig");
 const pp = @import("pretty_print_errs.zig");
 const symbolTable = @import("symb_table.zig").SymbolTable;
 const ut = @import("util.zig");
