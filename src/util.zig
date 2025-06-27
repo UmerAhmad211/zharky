@@ -1,13 +1,18 @@
 const std = @import("std");
+const eql = std.mem.eql;
 
 const compilerError = @import("pretty_print_errs.zig").compilerErrors;
 const errorToken = @import("pretty_print_errs.zig").errorToken;
 const s = @import("symb_table.zig");
 const symbol = s.Symbol;
+const symbolTable = s.SymbolTable;
 const td = @import("token_def.zig");
+const Regs = td.Regs;
+const TokenType = td.TokenType;
+
+pub const ELF_HDR_SZ = 116;
 
 pub var out_file_name: []const u8 = undefined;
-pub var out_file_type: []const u8 = undefined;
 
 pub const Line = struct {
     ln: []const u8,
@@ -81,28 +86,12 @@ pub fn readFileStoreAndTrim(lines: *std.MultiArrayList(Line), allocator: *const 
 
 // return register value
 pub fn retRegValues(reg: []const u8) u8 {
-    if (std.ascii.eqlIgnoreCase(reg, "eax")) {
-        return 0;
-    } else if (std.ascii.eqlIgnoreCase(reg, "ecx")) {
-        return 1;
-    } else if (std.ascii.eqlIgnoreCase(reg, "edx")) {
-        return 2;
-    } else if (std.ascii.eqlIgnoreCase(reg, "ebx")) {
-        return 3;
-    } else if (std.ascii.eqlIgnoreCase(reg, "esp")) {
-        return 4;
-    } else if (std.ascii.eqlIgnoreCase(reg, "ebp")) {
-        return 5;
-    } else if (std.ascii.eqlIgnoreCase(reg, "esi")) {
-        return 6;
-    } else if (std.ascii.eqlIgnoreCase(reg, "edi")) {
-        return 7;
-    }
+    if (Regs.get(reg)) |r| return r;
     return 8;
 }
 
 // convert to number
-pub fn isANumOfAnyBase(num: []const u8, allow_u8: bool) compilerError!Number {
+pub fn isANumOfAnyBase(num: []const u8, not_allow_u8: bool) compilerError!Number {
     // postfix check
     // h = hexa, o = octal, b = binary
     var base: u8 = undefined;
@@ -125,10 +114,10 @@ pub fn isANumOfAnyBase(num: []const u8, allow_u8: bool) compilerError!Number {
     };
 
     conv_num = Number{ .int_u32 = std.fmt.parseInt(u32, conv_str, base) catch return compilerError.programError };
-    if (!allow_u8) {
+    if (!not_allow_u8) {
         if (conv_num.int_u32 >= std.math.minInt(u8) and conv_num.int_u32 <= std.math.maxInt(u8)) {
-            const convd_num_i8: u8 = @intCast(conv_num.int_u32);
-            return Number{ .int_u8 = convd_num_i8 };
+            const convd_num_u8: u8 = @intCast(conv_num.int_u32);
+            return Number{ .int_u8 = convd_num_u8 };
         } else {
             return compilerError.syntaxError;
         }
@@ -138,11 +127,10 @@ pub fn isANumOfAnyBase(num: []const u8, allow_u8: bool) compilerError!Number {
 
 pub fn printHelp() compilerError!void {
     const zhky_usage =
-        \\zhky <file_name> -o <out_file_name> -<out_file_type>
+        \\zhky <file_name> -o <out_file_name>
         \\Example:
-        \\zhky main.asm -o main -elf32 
-        \\Note: As of now zharky only emits Windows (PE32), Linux (elf32) and DOS (dos) executables.
-        \\zharky supports cross compilation.
+        \\zhky main.asm -o main
+        \\Note: As of now zharky only emits Linux (elf32) executables.
     ;
 
     // dont make this global, wont compile for windows
@@ -157,27 +145,11 @@ pub fn assemblerDriver(args: [][:0]u8) compilerError!void {
             std.process.exit(0);
         }
         return compilerError.wrongArgs;
-    } else if (args.len != 5) {
+    } else if (args.len != 4) {
         return compilerError.wrongArgs;
-    } else if (!validFileExtension(args[1])) {
-        return compilerError.wrongArgs;
-    }
+    } else if (!validFileExtension(args[1]) or !eql(u8, args[2], "-o")) return compilerError.wrongArgs;
 
-    if (!(std.mem.eql(u8, args[4], "-pe32") or
-        std.mem.eql(u8, args[4], "-elf32") or
-        std.mem.eql(u8, args[4], "-dos")))
-    {
-        return compilerError.wrongArgs;
-    }
-    out_file_type = args[4];
     out_file_name = args[3];
-}
-
-pub inline fn containsStr(haystack: anytype, needle: []const u8) bool {
-    for (haystack) |i| {
-        if (std.mem.eql(u8, needle, i)) return true;
-    }
-    return false;
 }
 
 pub inline fn containsChar(haystack: []const u8, needle: u8) bool {
@@ -187,37 +159,40 @@ pub inline fn containsChar(haystack: []const u8, needle: u8) bool {
     return false;
 }
 
-pub fn createSymbol(d_size: bool, offset: *u32, t_type: td.TokenType, d_value: Number) compilerError!void {
-    switch (t_type) {
+pub fn incrDoffsetWrtDtype(d_size: bool, offset: *u32, d_type: td.TokenType, d_value: []const u8) compilerError!Number {
+    var d_convd: Number = undefined;
+    switch (d_type) {
         .CHAR => {
-            if (d_size == false) offset.* += 1 else {
+            if (!d_size) offset.* += 1 else {
                 return compilerError.stringCharNoDD;
             }
+            d_convd = Number{ .int_u8 = d_value[0] };
         },
         .STRING => {
-            if (d_size == false)
-                offset.* = @intCast(d_value.slice.len)
+            if (!d_size)
+                offset.* = @intCast(d_value.len)
             else {
                 return compilerError.stringCharNoDD;
             }
+            d_convd = Number{ .slice = d_value };
         },
         .IMM => {
-            if (d_size == false and d_value == .int_u8) offset.* += 1 else if (d_size == true and d_value == .int_u32) offset.* += 4 else {
+            d_convd = isANumOfAnyBase(d_value, d_size) catch |err| return err;
+            if (!d_size and d_convd == .int_u8) offset.* += 1 else if (d_size and d_convd == .int_u32) offset.* += 4 else {
                 return compilerError.syntaxError;
             }
         },
         else => return compilerError.notWorking,
     }
+    return d_convd;
 }
 
-pub fn retNumOfBytes(num: Number) compilerError!u32 {
+pub fn retNumOfBytes(num: Number) u32 {
     switch (num) {
         numberType.int_u32 => return 4,
         numberType.int_u8 => return 1,
         numberType.int_u16 => return 2,
-        numberType.slice => {
-            return compilerError.invalidOperand;
-        },
+        numberType.slice => @panic("No slice here."),
     }
 }
 
@@ -226,4 +201,32 @@ pub fn append32BitLittleEndian(buffer: *std.ArrayList(u8), num: u32) !void {
     try buffer.*.append(@intCast((num >> 8) & 0xFF));
     try buffer.*.append(@intCast((num >> 16) & 0xFF));
     try buffer.*.append(@intCast((num >> 24) & 0xFF));
+}
+
+pub inline fn createModrmByte(mod: u8, reg: u8, rm: u8) u8 {
+    return (mod << 6) | (reg << 3) | rm;
+}
+
+// it is always provided that idx is always within the len of the buffer
+pub fn updateFourConsecIndexes(header: *[ELF_HDR_SZ]u8, value: u32, idx: u32) void {
+    header.*[idx] += @intCast(value & 0xFF);
+    header.*[idx + 1] += @intCast((value >> 8) & 0xFF);
+    header.*[idx + 2] += @intCast((value >> 16) & 0xFF);
+    header.*[idx + 3] += @intCast((value >> 24) & 0xFF);
+}
+
+pub fn reduceToIntu8(value: u32) Number {
+    if (value >= std.math.minInt(u8) and value <= std.math.maxInt(u8)) {
+        const convd_num_u8: u8 = @intCast(value);
+        return Number{ .int_u8 = convd_num_u8 };
+    }
+    return Number{ .int_u32 = value };
+}
+
+pub fn checkIfDoubleOrByte(value: Number, s_table: *symbolTable) compilerError!TokenType {
+    if (value == .int_u32) return .ERR else if (value == .slice) {
+        const retd_offset = s_table.*.getOffset(value.slice) catch |err| return err;
+        return retd_offset.symbol_type;
+    }
+    return .ERR;
 }
