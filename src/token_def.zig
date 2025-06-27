@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const TokenType = enum {
     // multiple chars
     K_GLOBAL,
@@ -22,50 +24,79 @@ pub const TokenType = enum {
     O_BRACKET,
     C_BRACKET,
     COLON,
-    S_QUOTE,
-    D_QUOTE,
     CHAR,
     EOL,
-    // end of file
     ERR,
+    // end of file
     EOF,
 };
 
-pub const k_global = "global";
-pub const k_section = "section";
-pub const start = "_start";
+pub const Regs = std.StaticStringMap(u8).initComptime(.{
+    .{ "eax", 0 },
+    .{ "ecx", 1 },
+    .{ "edx", 2 },
+    .{ "ebx", 3 },
+    .{ "esp", 4 },
+    .{ "ebp", 5 },
+    .{ "esi", 6 },
+    .{ "edi", 7 },
+});
 
-pub const t_section = ".text";
-pub const d_section = ".data";
+pub const Jmps = std.StaticStringMap(u8).initComptime(.{
+    .{ "jmp", 0xE9 },
+    .{ "je", 0x0F },
+    .{ "jne", 0x10 },
+    .{ "call", 0xE8 },
+});
 
-pub const instructions_0op = [_][]const u8{ "hlt", "nop" };
+pub const RegsOp1 = std.StaticStringMap(u8).initComptime(.{
+    .{ "push", 0x50 },
+    .{ "pop", 0x58 },
+    .{ "dec", 0x48 },
+    .{ "inc", 0x40 },
+});
 
-pub const instructions_1op = [_][]const u8{
-    "mul", "div", "pop", "push", "int",  "neg",
-    "jmp", "je",  "jne", "loop", "call", "dec",
-    "inc", "not",
-};
+pub const SecOperandOp1 = std.StaticStringMap(u8).initComptime(.{
+    .{ "push", 0x68 },
+    .{ "pop", 0x8F },
+    .{ "dec", 1 },
+    .{ "inc", 0 },
+});
 
-pub const instructions_2op = [_][]const u8{
-    "mov", "add", "adc",  "sub", "cmp", "xor",
-    "and", "or",  "test",
-};
+pub const RegReg = std.StaticStringMap(u8).initComptime(.{
+    .{ "mov", 0x8B },
+    .{ "add", 0x01 },
+    .{ "cmp", 0x39 },
+});
 
-pub const instructions_optional_1op = [_][]const u8{
-    "ret",
-};
+pub const RegMem = std.StaticStringMap(u8).initComptime(.{
+    .{ "mov", 0x8B },
+    .{ "add", 0x03 },
+    .{ "cmp", 0x3B },
+});
 
-pub const word = "word";
-pub const dword = "dword";
+pub const RegData = std.StaticStringMap(u8).initComptime(.{
+    .{ "mov", 0xB8 },
+    .{ "add", 0x81 },
+    .{ "cmp", 0x81 },
+});
+pub const MemReg = std.StaticStringMap(u8).initComptime(.{
+    .{ "mov", 0x89 },
+    .{ "add", 0x01 },
+    .{ "cmp", 0x39 },
+});
 
-pub const db = "db";
-pub const dd = "dd";
+pub const MemData = std.StaticStringMap(u8).initComptime(.{
+    .{ "mov", 0xC7 },
+    .{ "add", 0x81 },
+    .{ "cmp", 0x81 },
+});
 
-pub const regs = [_][]const u8{
-    "eax", "ebx", "ecx",
-    "edx", "esi", "edi",
-    "ebp", "esp",
-};
+pub const MemDataByte = std.StaticStringMap(u8).initComptime(.{
+    .{ "mov", 0xC6 },
+    .{ "add", 0x80 },
+    .{ "cmp", 0x80 },
+});
 
 pub const single_char = [_]u8{
     ',', '[', ']', ' ', ':',
