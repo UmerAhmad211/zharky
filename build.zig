@@ -11,13 +11,13 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("main.zig"),
             .target = b.resolveTargetQuery(t),
             .strip = true,
-            .single_threaded = true,
             .optimize = .ReleaseFast,
         });
         const exe = b.addExecutable(.{
             .name = "zhky",
             .root_module = module,
         });
+        if (t.os_tag.? == .windows) exe.linkLibC();
         b.installArtifact(exe);
     }
 }
