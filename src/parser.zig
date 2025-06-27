@@ -9,6 +9,7 @@ const symbol = @import("symb_table.zig").Symbol;
 const symbolTable = @import("symb_table.zig").SymbolTable;
 const td = @import("token_def.zig");
 const TokenType = td.TokenType;
+const Jmps = td.Jmps;
 const ut = @import("util.zig");
 const Number = ut.Number;
 
@@ -94,9 +95,10 @@ fn expectTextSection() compilerError!void {
 fn expectData(s_table: *symbolTable, d_offset: *u32, data_arr: *std.ArrayList(u8)) compilerError!void {
     var d_size: bool = undefined;
     while (curr_token.type == .IDENTIFIER) {
+        var symb: symbol = undefined;
+        var id_name = curr_token.value;
         if (curr_token.type == .IDENTIFIER) {
-            var symb: symbol = .{ .symbol_type = .D_SECTION, .offset = d_offset.* };
-            s_table.*.storeSymbol(&symb, &curr_token.value) catch |err| return err;
+            symb.offset = d_offset.*;
             nextToken();
         } else {
             return compilerError.syntaxError;
@@ -108,6 +110,8 @@ fn expectData(s_table: *symbolTable, d_offset: *u32, data_arr: *std.ArrayList(u8
         } else {
             return compilerError.wrongDataId;
         }
+        symb.symbol_type = curr_token.type;
+        s_table.*.storeSymbol(&symb, &id_name) catch |err| return err;
         nextToken();
         checkForDataCommaPattern(d_size, &d_offset.*, &data_arr.*) catch |err| return err;
         nextToken();
@@ -117,14 +121,16 @@ fn expectData(s_table: *symbolTable, d_offset: *u32, data_arr: *std.ArrayList(u8
 // check operands and syntax
 fn expectText(s_table: *symbolTable, t_offset: *u32, text_arr: *std.ArrayList(instruction)) compilerError!void {
     while (curr_token.type != .EOF) {
+        var is_inst = true;
         var inst_line: instruction = .{ .opcode = undefined, .op1 = null, .op2 = null, .offset = 0 };
-        if (curr_token.type == .IDENTIFIER or curr_token.type == .START) {
+        if ((curr_token.type == .IDENTIFIER) or curr_token.type == .START) {
             var temp_token_for_symb = curr_token;
             nextToken();
             if (curr_token.type == .COLON) {
                 var temp_symb: symbol = .{ .offset = t_offset.*, .symbol_type = temp_token_for_symb.type };
                 s_table.*.storeSymbol(&temp_symb, &temp_token_for_symb.value) catch |err| return err;
                 nextToken();
+                is_inst = false;
             } else {
                 return compilerError.syntaxError;
             }
@@ -132,16 +138,13 @@ fn expectText(s_table: *symbolTable, t_offset: *u32, text_arr: *std.ArrayList(in
             inst_line.opcode = curr_token;
             inst_line.offset = t_offset.*;
             t_offset.* += 1;
-            text_arr.*.append(inst_line) catch return compilerError.programError;
+            nextToken();
         } else if (curr_token.type == .INSTRUCTION_1OP) {
-            inst_line = checkOperand1oP(&t_offset.*) catch |err| return err;
-            text_arr.*.append(inst_line) catch return compilerError.programError;
+            inst_line = checkOperand1op(&t_offset.*) catch |err| return err;
         } else if (curr_token.type == .INSTRUCTION_2OP) {
             inst_line = checkOperand2op(&t_offset.*) catch |err| return err;
-            text_arr.*.append(inst_line) catch return compilerError.programError;
         } else if (curr_token.type == .INSTRUCTION_O1OP) {
             inst_line = checkOperand01op(&t_offset.*) catch |err| return err;
-            text_arr.*.append(inst_line) catch return compilerError.programError;
         } else {
             return compilerError.unidentifiedInst;
         }
@@ -149,6 +152,7 @@ fn expectText(s_table: *symbolTable, t_offset: *u32, text_arr: *std.ArrayList(in
         if (curr_token.type != .EOL) {
             return compilerError.syntaxError;
         }
+        if (is_inst) text_arr.*.append(inst_line) catch return compilerError.programError;
         nextToken();
     }
 }
@@ -173,18 +177,15 @@ fn seekToken() TokenType {
 // data .COMMA .EOL         => bad
 fn checkForDataCommaPattern(d_size: bool, d_offset: *u32, data_arr: *std.ArrayList(u8)) compilerError!void {
     while (curr_token.type != .EOL) {
-        if (curr_token.type == .STRING or curr_token.type == .CHAR) {
-            ut.createSymbol(d_size, &d_offset.*, curr_token.type, Number{ .slice = curr_token.value }) catch |err| return err;
-            if (curr_token.type == .CHAR) data_arr.*.append(curr_token.value[0]) catch return compilerError.programError else {
-                for (curr_token.value) |c|
+        if ((curr_token.type == .STRING or curr_token.type == .CHAR or curr_token.type == .IMM) and !d_size) {
+            const d_convd = ut.incrDoffsetWrtDtype(d_size, &d_offset.*, curr_token.type, curr_token.value) catch |err| return err;
+            if (d_convd == .int_u8) data_arr.*.append(d_convd.int_u8) catch return compilerError.programError else {
+                for (d_convd.slice) |c|
                     data_arr.*.append(c) catch return compilerError.programError;
             }
-        } else if (curr_token.type == .IMM) {
-            const ch_num = ut.isANumOfAnyBase(curr_token.value, d_size) catch return compilerError.syntaxError;
-            ut.createSymbol(d_size, &d_offset.*, curr_token.type, ch_num) catch |err| return err;
-            if (ch_num == .int_u8) data_arr.*.append(ch_num.int_u8) catch return compilerError.syntaxError else {
-                ut.append32BitLittleEndian(&data_arr.*, ch_num.int_u32) catch return compilerError.programError;
-            }
+        } else if (curr_token.type == .IMM and d_size) {
+            const d_convd = ut.incrDoffsetWrtDtype(d_size, &d_offset.*, curr_token.type, curr_token.value) catch |err| return err;
+            ut.append32BitLittleEndian(&data_arr.*, d_convd.int_u32) catch return compilerError.programError;
         } else {
             return compilerError.syntaxError;
         }
@@ -210,7 +211,7 @@ fn createMem(t_offset: *u32) compilerError!operand {
 
     t_offset.* += 1;
 
-    if (curr_token.type == .IDENTIFIER) {
+    if (curr_token.type == .IDENTIFIER or curr_token.type == .START) {
         n_op.value = Number{ .slice = curr_token.value };
         t_offset.* += 4;
     } else if (curr_token.type == .IMM) {
@@ -218,8 +219,8 @@ fn createMem(t_offset: *u32) compilerError!operand {
         t_offset.* += 4;
     } else if (curr_token.type == .REG) {
         n_op.value = Number{ .slice = curr_token.value };
-        if (!eql(u8, curr_token.value, "eax"))
-            t_offset.* += 1;
+        const reg_val = ut.retRegValues(curr_token.value);
+        if (reg_val == 4 or reg_val == 5) t_offset.* += 1;
     } else {
         return compilerError.invalidOperand;
     }
@@ -237,7 +238,7 @@ fn createMem(t_offset: *u32) compilerError!operand {
 }
 
 // check operands of instructions with 1 operand and return their processed form
-fn checkOperand1oP(t_offset: *u32) compilerError!instruction {
+fn checkOperand1op(t_offset: *u32) compilerError!instruction {
     var n_inst: instruction = .{ .opcode = curr_token, .op1 = null, .op2 = null, .offset = t_offset.* };
     const seekd_token = seekToken();
     var is_int_inst: bool = false;
@@ -250,21 +251,27 @@ fn checkOperand1oP(t_offset: *u32) compilerError!instruction {
         if (seekd_token == .IMM) {
             nextToken();
             n_inst.op1 = parseImm(is_int_inst) catch |err| return err;
-            t_offset.* += ut.retNumOfBytes(n_inst.op1.?.value) catch |err| return err;
+            t_offset.* += ut.retNumOfBytes(n_inst.op1.?.value);
+            if (is_int_inst and n_inst.op1.?.value != .int_u8) return compilerError.invalidOperand;
+        } else if (!is_int_inst and seekd_token == .REG) {
+            nextToken();
+            n_inst.op1 = parseAllOps(&t_offset.*, false) catch |err| return err;
         } else {
             return compilerError.invalidOperand;
         }
     } else if (eql(u8, curr_token.value, "jmp") or eql(u8, curr_token.value, "je") or eql(u8, curr_token.value, "jne") or eql(u8, curr_token.value, "call")) {
         if (seekd_token == .IDENTIFIER) {
             nextToken();
-            n_inst.op1 = parseAllOps(&t_offset.*) catch |err| return err;
+            n_inst.op1 = parseAllOps(&t_offset.*, false) catch |err| return err;
+            const jmp_opcode = Jmps.get(n_inst.opcode.value);
+            if (jmp_opcode.? == 0x0F or jmp_opcode.? == 0x10) t_offset.* += 1;
             t_offset.* += 4;
         } else {
             return compilerError.invalidOperand;
         }
     } else if (seekd_token == .REG or seekd_token == .O_BRACKET) {
         nextToken();
-        n_inst.op1 = parseAllOps(&t_offset.*) catch |err| return err;
+        n_inst.op1 = parseAllOps(&t_offset.*, false) catch |err| return err;
     } else {
         return compilerError.syntaxError;
     }
@@ -280,42 +287,38 @@ fn checkOperand2op(t_offset: *u32) compilerError!instruction {
 
     t_offset.* += 1;
 
-    if (eql(u8, curr_token.value, "mov")) {
-        if (seekd_token == .REG or seekd_token == .O_BRACKET) {
-            nextToken();
-            n_inst.op1 = parseAllOps(&t_offset.*) catch |err| return err;
-        } else {
-            return compilerError.syntaxError;
-        }
+    if (seekd_token == .REG or seekd_token == .O_BRACKET) {
         nextToken();
-        if (curr_token.type != .COMMA) return compilerError.syntaxError;
-        seekd_token = seekToken();
-        if (seekd_token == .REG or (seekd_token == .O_BRACKET and n_inst.op1.?.op_type != .MEM) or seekd_token == .IMM or seekd_token == .IDENTIFIER) {
-            nextToken();
-            n_inst.op2 = parseAllOps(&t_offset.*) catch |err| return err;
+        n_inst.op1 = parseAllOps(&t_offset.*, false) catch |err| return err;
+    } else {
+        return compilerError.syntaxError;
+    }
+    nextToken();
+    if (curr_token.type != .COMMA) return compilerError.syntaxError;
+    seekd_token = seekToken();
+    // zig fmt: off
+    if (seekd_token == .REG
+    or seekd_token == .START
+    or (seekd_token == .CHAR and n_inst.op1.?.op_type != .REG)
+    or (seekd_token == .O_BRACKET and n_inst.op1.?.op_type != .MEM)
+    or seekd_token == .IMM or seekd_token == .IDENTIFIER) {
+        nextToken();
+        if (curr_token.type == .CHAR) {
+            n_inst.op2.?.op_type = curr_token.type;
+            n_inst.op2.?.value = Number{ .int_u8 = curr_token.value[0] };
+            t_offset.* += 1;
         } else {
-            return compilerError.invalidOperand;
+            n_inst.op2 = parseAllOps(&t_offset.*, n_inst.op1.?.op_type == .MEM) catch |err| return err;
+            if (curr_token.type == .IDENTIFIER or curr_token.type == .START) t_offset.* += 4;
         }
     } else {
-        if (seekd_token == .REG or seekd_token == .O_BRACKET) {
-            nextToken();
-            n_inst.op1 = parseAllOps(&t_offset.*) catch |err| return err;
-            if (curr_token.type == .REG) t_offset.* += 1;
-        }
-        nextToken();
-        if (curr_token.type != .COMMA) return compilerError.syntaxError;
-        seekd_token = seekToken();
-        if (seekd_token == .REG or seekd_token == .IMM) {
-            nextToken();
-            n_inst.op2 = parseAllOps(&t_offset.*) catch |err| return err;
-            if (curr_token.type == .IMM) t_offset.* += 4;
-        } else {
-            return compilerError.syntaxError;
-        }
+        return compilerError.invalidOperand;
     }
 
-    if (curr_token.type == .IMM or curr_token.type == .IDENTIFIER) t_offset.* += 4;
-
+    if (n_inst.op1.?.op_type == .REG 
+    and (n_inst.op2.?.op_type == .REG 
+    or (td.RegData.get(n_inst.opcode.value).? == 0x81 and n_inst.op2.?.op_type == .IMM))) t_offset.* += 1;
+    // zig fmt: on
     nextToken();
     return n_inst;
 }
@@ -335,23 +338,21 @@ fn checkOperand01op(t_offset: *u32) compilerError!instruction {
         } else {
             return compilerError.invalidOperand;
         }
-    } else if (seekd_token == .EOL) return compilerError.syntaxError;
+    } else if (seekd_token != .EOL) return compilerError.syntaxError;
 
     nextToken();
     return n_inst;
 }
 
 // parse imm
-fn parseImm(is_int_inst: bool) compilerError!operand {
+fn parseImm(byte_op: bool) compilerError!operand {
     var op: operand = undefined;
     var convd_num: Number = undefined;
 
-    if (is_int_inst) {
-        convd_num = ut.isANumOfAnyBase(curr_token.value, false) catch |err| return err;
-        if (convd_num != ut.numberType.int_u8) return compilerError.invalidOperand;
-    } else {
+    if (byte_op)
+        convd_num = ut.isANumOfAnyBase(curr_token.value, false) catch |err| return err
+    else
         convd_num = ut.isANumOfAnyBase(curr_token.value, true) catch |err| return err;
-    }
 
     op.value = convd_num;
     op.op_type = curr_token.type;
@@ -359,17 +360,20 @@ fn parseImm(is_int_inst: bool) compilerError!operand {
 }
 
 // parse reg,id or mem
-fn parseAllOps(t_offset: *u32) compilerError!operand {
+fn parseAllOps(t_offset: *u32, byte_op: bool) compilerError!operand {
     var op: operand = undefined;
 
     if (curr_token.type == .O_BRACKET) {
         nextToken();
         op = createMem(&t_offset.*) catch |err| return err;
     } else {
-        if (curr_token.type == .IMM) op = parseImm(false) catch |err| return err else {
+        if (curr_token.type == .IMM) {
+            op = parseImm(byte_op) catch |err| return err;
+            t_offset.* += ut.retNumOfBytes(op.value);
+        } else {
             op.value = Number{ .slice = curr_token.value };
+            op.op_type = curr_token.type;
         }
-        op.op_type = curr_token.type;
     }
     return op;
 }
