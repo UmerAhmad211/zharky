@@ -8,7 +8,6 @@ pub const compilerErrors = error{
     wrongDataId,
     syntaxError,
     unidentifiedInst,
-    eaxNoDisp,
     stringCharNoDD,
     notWorking,
     programError,
@@ -41,10 +40,6 @@ pub fn printErrMsgAndExit(token: *errorToken) void {
         },
         compilerErrors.syntaxError => {
             print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "Syntax error:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
-            printErrLine(token);
-        },
-        compilerErrors.eaxNoDisp => {
-            print("ZHARKY: " ++ red ++ "Error: " ++ reset ++ "EAX takes no displacement:{d}:{d}.\n", .{ token.*.err_token.row_no, token.*.err_token.col_no });
             printErrLine(token);
         },
         compilerErrors.wrongDataId => {
